@@ -644,7 +644,8 @@ function buildModels() {
   // Con una sola seña cargada se usa un valor fijo, medido con videos reales.
   for (const M of movModels) {
     let near = Infinity;
-    for (const O of movModels) if (O !== M) for (const a of M.F) for (const b of O.F) near = Math.min(near, dtw(a, b));
+    // con muchas señas cargadas se comparan hasta 3 ejemplos de cada una, para que no tarde
+    for (const O of movModels) if (O !== M) for (const a of M.F.slice(0, 3)) for (const b of O.F.slice(0, 3)) near = Math.min(near, dtw(a, b));
     const base = M.thr != null ? Math.max(M.thr, 0.6) : 0.9;
     M.thr = isFinite(near) ? Math.min(base, Math.max(near * 0.6, 0.35)) : base;
   }
@@ -813,18 +814,23 @@ function diag(best, bestS) {
 function movStep(now) {
   if (!movModels.length) { $("liveMov").textContent = "Movimiento: —"; $("liveMovBar").style.width = "0"; return; }
   const tol = state.settings.movTol;
+  // 1) todas las señas a velocidad normal; 2) solo las 6 más parecidas, también más lento y más rápido
+  const distAt = (M, sc) => {
+    const w = buf.filter((f) => f.t >= now - M.dur * sc);
+    const vs = w.filter((f) => f.v).map((f) => f.v);
+    if (vs.length < 4 || vs.length < w.length * 0.7) return Infinity;
+    if (vs[0].length !== M.F[0][0].length) return Infinity;
+    const R = resample(vs, L);
+    let d = Infinity;
+    for (const F of M.F) d = Math.min(d, dtw(R, F, 3, fdm));
+    return d;
+  };
+  const cand = movModels.map((M) => ({ M, d: distAt(M, 1) }));
+  const top = cand.slice().sort((a, b) => a.d / a.M.thr - b.d / b.M.thr).slice(0, 6);
+  for (const c of top) c.d = Math.min(c.d, distAt(c.M, 0.8), distAt(c.M, 1.25));
   let best = null, bestS = Infinity, second = Infinity;
-  for (const M of movModels) {
-    let dmin = Infinity;
-    for (const sc of [0.8, 1, 1.25]) {
-      const w = buf.filter((f) => f.t >= now - M.dur * sc);
-      const vs = w.filter((f) => f.v).map((f) => f.v);
-      if (vs.length < 4 || vs.length < w.length * 0.7) continue;
-      if (vs[0].length !== M.F[0][0].length) continue;
-      const R = resample(vs, L);
-      for (const F of M.F) dmin = Math.min(dmin, dtw(R, F, 3, fdm));
-    }
-    const s = dmin / (M.thr * tol);
+  for (const { M, d } of cand) {
+    const s = d / (M.thr * tol);
     if (s < bestS) { second = bestS; bestS = s; best = M.c; } else if (s < second) second = s;
   }
   const ok = best && bestS < 1 && bestS < second * 0.85;
@@ -957,7 +963,7 @@ async function importVideos(files, target) {
   importing = true;
   try {
     setStatus("Cargando modelos…"); await ensureModels();
-    let ok = 0;
+    let ok = 0, done = 0;
     // archivos del dataset LSA64 (seña_persona_repetición.mp4): primero una repetición de cada persona
     const m64 = (f) => { const m = /(?:^|[^0-9])(\d{3})_(\d{3})_(\d{3})\.[^.]+$/.exec(f.name); return m && +m[1] >= 1 && +m[1] <= 64 ? m : null; };
     if (!target) files.sort((a, b) => {
@@ -979,6 +985,8 @@ async function importVideos(files, target) {
         }
         if (m && c.seqs.filter((q) => q.m === mode && q.src === "video").length >= MAX_SEQS) { full++; continue; }
       }
+      done++; setStatus(`Videos: ${done + full} de ${files.length}`);
+      while (box.children.length > 150) box.firstChild.remove();
       const line = log(`⏳ ${file.name} → ${c.text}`);
       try {
         const prog = (p) => (line.textContent = `⏳ ${file.name} → ${c.text} (${Math.round(p * 100)}%)`);
@@ -992,6 +1000,7 @@ async function importVideos(files, target) {
         const mine = c.seqs.filter((s) => s.m === mode);
         if (mine.length > MAX_SEQS) c.seqs.splice(c.seqs.indexOf(mine[0]), 1);
         line.textContent = `✅ ${file.name} → ${c.text}`; ok++;
+        if (ok % 10 === 0) save();   // guardado parcial: si se cierra la pestaña no se pierde todo
       } catch (e) { line.textContent = `⚠️ ${file.name}: ${e.message || e}`; }
     }
     trained(); render();
