@@ -273,6 +273,8 @@
         <input type="file" id="dsDir" webkitdirectory multiple hidden>
         <label class="btn big sec" for="dsFiles" style="margin-top:8px">O elegir videos sueltos…</label>
         <input type="file" id="dsFiles" multiple hidden>
+        <label class="btn big sec" for="dsPrev" style="margin-top:8px">Continuar desde un archivo de datos anterior…</label>
+        <input type="file" id="dsPrev" accept="application/json,.json" multiple hidden>
         <p class="hint" id="dsInfo"></p>
         <div class="row" style="flex-wrap:wrap">
           <button class="btn" id="dsSave" disabled>Descargar archivo de datos</button>
@@ -1225,6 +1227,21 @@ async function buildDataset(files) {
 $("dsDir").onchange = (e) => { buildDataset([...e.target.files]); e.target.value = ""; };
 $("dsFiles").onchange = (e) => { buildDataset([...e.target.files]); e.target.value = ""; };
 $("dsStop").onclick = () => { dsStopAsk = true; };
+// retomar: carga uno o más archivos de datos ya descargados, así esos videos no se procesan de nuevo
+$("dsPrev").onchange = async (e) => {
+  const fs = [...e.target.files]; e.target.value = "";
+  let added = 0;
+  for (const f of fs) {
+    try {
+      const d = JSON.parse(await f.text());
+      if (d.fmt !== "voz-con-gestos/lsa64-landmarks" || d.frames !== DS_T || d.dim !== DS_DIM) throw new Error();
+      const have = new Set(dsItems.map((x) => x.f));
+      for (const it of d.items) if (!have.has(it.f)) { dsItems.push(it); have.add(it.f); added++; }
+    } catch (err) { toast(`${f.name} no es un archivo de datos de esta app`); }
+  }
+  $("dsInfo").closest("details").open = true;
+  dsInfo(added ? `Se cargaron ${added} videos ya procesados. Elegí de nuevo la carpeta para seguir con los que faltan.` : "");
+};
 $("dsSave").onclick = () => {
   const data = { fmt: "voz-con-gestos/lsa64-landmarks", v: 1, frames: DS_T, dim: DS_DIM, scale: DS_SCALE, miss: DS_MISS,
     layout: "mano0[21xy] mano1[21xy] pose[nariz,hombros,codos,muñecas xy]", items: dsItems };
