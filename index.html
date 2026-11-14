@@ -262,6 +262,29 @@
       </details>
     </div>
     <div class="card">
+      <details id="ownBox">
+        <summary>Grabar mis repeticiones para el modelo</summary>
+        <p class="hint">
+          Tus propias repeticiones, sin guantes y con tu cámara, son las que más mejoran el reconocimiento en vivo.
+          Elegí la seña, tocá Grabar y, cuando termine la cuenta regresiva, hacé la seña <b>una sola vez</b> y bajá la mano.
+          Lo ideal son 5 repeticiones por seña. Se guardan en este navegador y salen en el mismo archivo de datos.
+        </p>
+        <label class="f" for="ownSign">Seña</label>
+        <select id="ownSign"></select>
+        <div class="row" style="margin-top:10px;flex-wrap:wrap">
+          <div style="flex:1;min-width:150px"><label class="f" for="ownWho" style="margin-top:0">Quién graba</label><input type="text" id="ownWho" maxlength="20" placeholder="Ej.: Gaby"></div>
+          <div style="flex:1;min-width:150px"><label class="f" for="ownDur" style="margin-top:0">Duración</label>
+            <select id="ownDur"><option value="2000">2 segundos</option><option value="3000" selected>3 segundos</option><option value="4000">4 segundos</option></select></div>
+        </div>
+        <div class="row" style="margin-top:12px;flex-wrap:wrap">
+          <button class="btn rec" id="ownRec">Grabar repetición</button>
+          <button class="btn sec" id="ownNext">Seña siguiente</button>
+          <button class="btn sec" id="ownUndo">Deshacer la última</button>
+        </div>
+        <p class="hint" id="ownInfo"></p>
+      </details>
+    </div>
+    <div class="card">
       <details>
         <summary>Datos para el modelo inteligente (LSA64)</summary>
         <p class="hint">
@@ -800,6 +823,7 @@ let buf = [], coolUntil = 0;
 // segmentación: una seña = movimiento que arranca desde quieto y termina quieto
 let prevV = null, eHist = [], stillCount = 0, movArmed = true, lastMoveT = 0;
 let wasHeld = false;
+let cap = null, lastPoseL = null;
 let poseN = 0, liveRef = null, liveCv = null, liveG = null, lastHand = null;
 function loop() {
   if (!running) return;
@@ -819,13 +843,16 @@ function loop() {
       if (m !== "cara" && handLm) hr = handLm.detectForVideo(box ? liveCv : video, ts);
       if (m !== "manos" && faceLm) fr = faceLm.detectForVideo(video, ts);
     } catch (e) { console.warn(e); }
-    if (m !== "cara" && poseLm && (++poseN % 3 === 0 || !liveRef)) {
+    if (m !== "cara" && poseLm && (cap || ++poseN % 3 === 0 || !liveRef)) {
       try {
-        const r = bodyRef(poseLm.detectForVideo(video, ts + 0.5), W, H);
+        const pres = poseLm.detectForVideo(video, ts + 0.5);
+        lastPoseL = pres?.landmarks?.[0] || null;
+        const r = bodyRef(pres, W, H);
         if (r) liveRef = liveRef ? { cx: liveRef.cx * 0.6 + r.cx * 0.4, cy: liveRef.cy * 0.6 + r.cy * 0.4, s: liveRef.s * 0.6 + r.s * 0.4 } : r;
       } catch (e) {}
     }
     draw(hr, fr, box);
+    if (cap) { capFrame(hr, box, W, H, ts); requestAnimationFrame(loop); return; }
     // la cara se analiza siempre en la imagen completa; el recorte solo aplica a las manos
     onFrame(extract(hr, fr, { W, H, box, ref: liveRef || fallbackRef(W, H) }), ts);
   }
@@ -1143,7 +1170,7 @@ const dsDb = (() => {
     r.onsuccess = () => ok(r.result); r.onerror = () => bad(r.error);
   }));
   const run = async (mode, fn) => { const db = await open(); return new Promise((ok, bad) => { const tx = db.transaction("dataset", mode); const q = fn(tx.objectStore("dataset")); tx.oncomplete = () => ok(q && q.result); tx.onerror = () => bad(tx.error); }); };
-  return { put: (it) => run("readwrite", (s) => s.put(it)).catch(() => {}), all: () => run("readonly", (s) => s.getAll()).catch(() => []), clear: () => run("readwrite", (s) => s.clear()).catch(() => {}) };
+  return { del: (k) => run("readwrite", (s) => s.delete(k)).catch(() => {}), put: (it) => run("readwrite", (s) => s.put(it)).catch(() => {}), all: () => run("readonly", (s) => s.getAll()).catch(() => []), clear: () => run("readwrite", (s) => s.clear()).catch(() => {}) };
 })();
 function b64i16(a) {
   const u = new Uint8Array(a.buffer); let str = "";
@@ -1202,8 +1229,79 @@ async function videoToRaw(file) {
     return { d: b64i16(out), seen, w: W, h: H, dur: +dur.toFixed(2) };
   } finally { URL.revokeObjectURL(url); }
 }
+// ---------- Repeticiones propias para el modelo (misma medida que LSA64, secuencia completa sin recortar) ----------
+const ownSel = $("ownSign");
+LSA64.forEach((w, i) => { const o = document.createElement("option"); o.value = i + 1; o.textContent = `${String(i + 1).padStart(3, "0")} · ${w}`; ownSel.appendChild(o); });
+try { $("ownWho").value = localStorage.getItem("vozgestos_who") || ""; } catch (e) {}
+const ownList = () => dsItems.filter((x) => x.own);
+function ownInfo(extra) {
+  const sgn = +ownSel.value, n = ownList().filter((x) => x.s === sgn).length;
+  const signs = new Set(ownList().map((x) => x.s)).size;
+  $("ownInfo").textContent = `${LSA64[sgn - 1]}: ${n} ${n === 1 ? "repetición tuya" : "repeticiones tuyas"}. En total: ${ownList().length} de ${signs} seña${signs === 1 ? "" : "s"}.` + (extra ? " " + extra : "");
+}
+ownSel.onchange = () => ownInfo();
+ownInfo();
+$("ownNext").onclick = () => { ownSel.selectedIndex = (ownSel.selectedIndex + 1) % ownSel.options.length; ownInfo(); };
+$("ownUndo").onclick = async () => {
+  const mine = ownList(); if (!mine.length) return;
+  const last = mine[mine.length - 1];
+  dsItems = dsItems.filter((x) => x !== last);
+  await dsDb.del(last.f); ownInfo("Se borró la última."); dsInfo();
+};
+$("ownRec").onclick = async () => {
+  if (!running) { toast("Primero activá la cámara"); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (cap || rec || importing) return;
+  if (state.settings.mode === "cara") { toast("Para grabar señas, elegí el modo Manos en Ajustes"); return; }
+  const who = ($("ownWho").value.trim() || "yo").replace(/[^\p{L}\p{N}_-]+/gu, "-");
+  try { localStorage.setItem("vozgestos_who", $("ownWho").value.trim()); } catch (e) {}
+  const sgn = +ownSel.value, cd = $("countdown");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  cd.style.display = "flex";
+  for (const n of [3, 2, 1]) { cd.innerHTML = ""; cd.append(String(n)); const sm = document.createElement("small"); sm.textContent = `${LSA64[sgn - 1]}: hacé la seña una vez y bajá la mano`; cd.append(sm); await new Promise((r) => setTimeout(r, 800)); }
+  cd.style.display = "none"; $("recBadge").style.display = "block";
+  const start = performance.now();
+  cap = { sgn, who, start, until: start + +$("ownDur").value, t: [], frames: [] };
+};
+function capFrame(hr, box, W, H, now) {
+  $("recBar").style.width = Math.min(100, (now - cap.start) / (cap.until - cap.start) * 100) + "%";
+  const fr = new Float32Array(DS_DIM).fill(NaN);
+  const hd = hr?.handednesses || hr?.handedness || [], used = [false, false];
+  (hr?.landmarks || []).forEach((lms, hi) => {
+    const px = (q) => box ? [box.x0 + q.x * box.side, box.y0 + q.y * box.side] : [q.x * W, q.y * H];
+    const lab = hd[hi]?.[0]?.categoryName;
+    let idx = lab ? (lab === "Left" ? 0 : 1) : (px(lms[0])[0] < W / 2 ? 0 : 1);
+    if (used[idx]) idx = 1 - idx;
+    if (used[idx]) return;
+    used[idx] = true;
+    lms.forEach((pt, j) => { const [x, y] = px(pt); fr[idx * 42 + j * 2] = x; fr[idx * 42 + j * 2 + 1] = y; });
+  });
+  if (lastPoseL) DS_POSE.forEach((k, j) => { fr[84 + j * 2] = lastPoseL[k].x * W; fr[85 + j * 2] = lastPoseL[k].y * H; });
+  cap.frames.push(fr); cap.t.push(Math.round(now - cap.start));
+  if (now >= cap.until) finishCap(W, H);
+}
+function finishCap(W, H) {
+  const c = cap; cap = null;
+  $("recBadge").style.display = "none"; $("recBar").style.width = "0"; buf = []; smooth = [];
+  // referencia del cuerpo: mediana de los hombros durante la grabación
+  const sh = c.frames.filter((f) => !Number.isNaN(f[86])).map((f) => ({ cx: (f[86] + f[88]) / 2, cy: (f[87] + f[89]) / 2, s: Math.hypot(f[86] - f[88], f[87] - f[89]) }));
+  const withHand = c.frames.filter((f) => !Number.isNaN(f[0]) || !Number.isNaN(f[42])).length;
+  if (sh.length < c.frames.length * 0.5) { toast("No se vieron bien los hombros: alejate un poco de la cámara y repetí"); return; }
+  if (withHand < Math.max(5, c.frames.length * 0.25)) { toast("Casi no se vio la mano: revisá la luz y repetí"); return; }
+  const med = (k) => sh.map((r) => r[k]).sort((a, b) => a - b)[Math.floor(sh.length / 2)];
+  const ref = { cx: med("cx"), cy: med("cy"), s: med("s") };
+  const out = new Int16Array(c.frames.length * DS_DIM).fill(DS_MISS);
+  c.frames.forEach((f, i) => { for (let k = 0; k < DS_DIM; k++) { const v = f[k]; if (Number.isNaN(v)) continue;
+    out[i * DS_DIM + k] = Math.max(-32767, Math.min(32767, Math.round((v - (k % 2 ? ref.cy : ref.cx)) / ref.s * DS_SCALE))); } });
+  const r = ownList().filter((x) => x.s === c.sgn && x.p === c.who).length + 1;
+  const it = { f: `propio_${c.who}_${String(c.sgn).padStart(3, "0")}_${Date.now()}`, own: true, s: c.sgn, p: c.who, r, n: c.frames.length, t: c.t, w: W, h: H, d: b64i16(out) };
+  dsItems.push(it); dsDb.put(it);
+  ownInfo(`Guardada (${withHand} de ${c.frames.length} cuadros con mano).`); dsInfo();
+  toast(`${LSA64[c.sgn - 1]}: repetición ${r} guardada`);
+}
+
 function dsInfo(extra) {
-  $("dsInfo").textContent = `Videos listos para descargar: ${dsItems.length}.` + (extra ? " " + extra : "");
+  const own = ownList().length;
+  $("dsInfo").textContent = `Listos para descargar: ${dsItems.length - own} videos de LSA64` + (own ? ` y ${own} repeticiones propias.` : ".") + (extra ? " " + extra : "");
   $("dsSave").disabled = !dsItems.length;
 }
 async function buildDataset(files) {
@@ -1250,7 +1348,7 @@ $("dsPrev").onchange = async (e) => {
       const d = JSON.parse(await f.text());
       if (d.fmt !== "voz-con-gestos/lsa64-landmarks" || d.frames !== DS_T || d.dim !== DS_DIM) throw new Error();
       const have = new Set(dsItems.map((x) => x.f));
-      for (const it of d.items) if (!have.has(it.f)) { dsItems.push(it); dsDb.put(it); have.add(it.f); added++; }
+      for (const it of [...d.items, ...(d.own || [])]) if (!have.has(it.f)) { dsItems.push(it); dsDb.put(it); have.add(it.f); added++; }
     } catch (err) { toast(`${f.name} no es un archivo de datos de esta app`); }
   }
   $("dsInfo").closest("details").open = true;
@@ -1258,10 +1356,11 @@ $("dsPrev").onchange = async (e) => {
 };
 $("dsSave").onclick = () => {
   const data = { fmt: "voz-con-gestos/lsa64-landmarks", v: 1, frames: DS_T, dim: DS_DIM, scale: DS_SCALE, miss: DS_MISS,
-    layout: "mano0[21xy] mano1[21xy] pose[nariz,hombros,codos,muñecas xy]", items: dsItems };
+    layout: "mano0[21xy] mano1[21xy] pose[nariz,hombros,codos,muñecas xy]",
+    items: dsItems.filter((x) => !x.own), own: ownList() };
   const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `datos-lsa64-${dsItems.length}-videos.json`; a.click(); window.__dsSaved = true;
+  a.download = `datos-lsa64-${dsItems.length - ownList().length}-videos${ownList().length ? `-${ownList().length}-propias` : ""}.json`; a.click(); window.__dsSaved = true;
   setTimeout(() => URL.revokeObjectURL(a.href), 10000);
 };
 window.addEventListener("beforeunload", (e) => { if (dsRunning) { e.preventDefault(); e.returnValue = ""; } });
@@ -1269,6 +1368,7 @@ $("dsClear").onclick = () => confirmInline($("dsClear"), async () => { await dsD
 dsDb.all().then((items) => {
   if (!items || !items.length || dsItems.length) return;
   dsItems = items;
+  ownInfo();
   $("dsInfo").closest("details").open = true;
   dsInfo("Recuperados del guardado automático. Elegí la carpeta para seguir con los que faltan.");
 });
