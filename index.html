@@ -3,117 +3,208 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="theme-color" content="#0f766e">
+<meta name="theme-color" content="#0B2545">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>Voz con Gestos</title>
 <style>
   :root{
-    --bg:#f6f7f4; --card:#fff; --ink:#14201d; --muted:#5b6a66; --line:#dfe5e2;
-    --pri:#0f766e; --pri-ink:#fff; --bad:#b91c1c; --mov:#7c3aed;
-    --radius:16px;
+    /* Paleta tomada de la bandera de la comunidad Sorda: azul marino, turquesa y amarillo */
+    --bg:#EEF2F6; --surface:#FFFFFF; --ink:#0B2545; --muted:#55657C; --line:#D5DDE8;
+    --pri:#0B7F7D; --pri-ink:#FFFFFF; --pri-soft:#DDF3F1;
+    --voice:#F6C445; --voice-ink:#0B2545;
+    --bad:#C2372E; --mov:#5B4BD6;
+    --ok-bg:#DDF3E4; --ok-ink:#14532D; --low-bg:#FCEFC7; --low-ink:#6B4A05; --none-bg:#E6EBF2; --none-ink:#55657C;
+    --stage:#0B2545; --stage-ink:#EAF1FA; --stage-muted:#9DB0C8; --stage-line:#24406A;
+    --r-stage:20px; --r-card:14px; --r-ctl:10px;
+    --font:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
   }
   @media (prefers-color-scheme:dark){
-    :root{ --bg:#0e1513; --card:#17211e; --ink:#eef4f2; --muted:#9fb1ac; --line:#2a3834; --pri:#2dd4bf; --pri-ink:#062b27; --mov:#a78bfa; }
+    :root{
+      --bg:#071528; --surface:#0E223F; --ink:#EAF1FA; --muted:#9DB0C8; --line:#1E3658;
+      --pri:#2CC7C2; --pri-ink:#04302F; --pri-soft:#123B4A;
+      --ok-bg:#12402A; --ok-ink:#B7F0CB; --low-bg:#4A3A0C; --low-ink:#F8E3A3; --none-bg:#1A2F4E; --none-ink:#9DB0C8;
+      --stage:#050F1E; --stage-line:#1E3658; --mov:#8E82F0;
+    }
   }
   *{box-sizing:border-box}
-  html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
-  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--pri);color:var(--pri-ink)}
-  header h1{font-size:20px;margin:0}
-  #status{font-size:13px;opacity:.9}
-  nav{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
-  nav button{border:0;background:transparent;color:var(--muted);padding:10px 4px;border-radius:10px;font-size:15px;font-weight:600}
-  nav button.on{background:var(--pri);color:var(--pri-ink)}
-  main{max-width:760px;margin:0 auto;padding:12px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
-  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;background:var(--pri);color:var(--pri-ink);cursor:pointer;text-decoration:none}
-  .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
-  .btn.bad{background:var(--bad);color:#fff}
-  .btn.mov{background:var(--mov);color:#fff}
-  .btn:disabled{opacity:.45}
-  .btn.big{width:100%;padding:16px;font-size:18px}
-  .btn.sm{padding:8px 10px;font-size:14px}
-  #camWrap{position:relative;border-radius:var(--radius);overflow:hidden;background:#000;aspect-ratio:4/3}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.45 var(--font);-webkit-text-size-adjust:100%}
+  body{padding-bottom:84px}
+  a{color:var(--pri)}
+  code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;background:var(--none-bg);padding:1px 5px;border-radius:5px}
+  :focus-visible{outline:3px solid var(--voice);outline-offset:2px}
+  [hidden]{display:none!important}
+
+  /* ---------- Cabecera y navegación ---------- */
+  header{background:var(--stage);color:var(--stage-ink);display:flex;align-items:center;gap:16px;padding:12px 16px}
+  .brand{display:flex;align-items:center;gap:10px;margin-right:auto;min-width:0}
+  .brand svg{flex:none}
+  header h1{font-size:20px;line-height:1.1;margin:0;letter-spacing:-.01em;white-space:nowrap}
+  #status{flex:none;font-size:13px;color:var(--stage-muted);border:1px solid var(--stage-line);border-radius:99px;padding:5px 11px;max-width:46vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  nav{position:fixed;left:0;right:0;bottom:0;z-index:10;display:grid;grid-template-columns:repeat(4,1fr);background:var(--surface);border-top:1px solid var(--line);padding:6px 6px calc(6px + env(safe-area-inset-bottom,0px))}
+  nav button{appearance:none;border:0;background:transparent;color:var(--muted);font:inherit;font-size:13px;font-weight:700;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;border-radius:var(--r-ctl);cursor:pointer}
+  nav button svg{width:24px;height:24px}
+  nav button.on{color:var(--pri);background:var(--pri-soft)}
+
+  /* ---------- Estructura ---------- */
+  main{max-width:720px;margin:0 auto;padding:16px 14px;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+  section[data-panel]{display:grid;gap:14px;align-content:start;min-width:0}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r-card);padding:16px;min-width:0}
+  .card > strong:first-child{display:block;font-size:18px;margin-bottom:8px}
+  .hint{font-size:14.5px;color:var(--muted);max-width:68ch}
+  p.hint{margin:8px 0}
+  .row{display:flex;gap:8px;align-items:center}
+  .row input[type=text],.row input[type=search]{flex:1;min-width:0}
+  label.f{display:block;margin:18px 0 6px;font-weight:700}
+  label.f:first-child{margin-top:0}
+  details summary{cursor:pointer;font-weight:700;font-size:17px;list-style:none;display:flex;align-items:center;justify-content:space-between;gap:10px}
+  details summary::-webkit-details-marker{display:none}
+  details summary::after{content:"";width:9px;height:9px;border-right:2px solid var(--muted);border-bottom:2px solid var(--muted);transform:rotate(45deg);flex:none;margin-right:4px;transition:transform .15s}
+  details[open] summary::after{transform:rotate(-135deg)}
+  details[open] summary{margin-bottom:8px}
+
+  /* ---------- Escenario de cámara ---------- */
+  .stage{background:var(--stage);color:var(--stage-ink);border-radius:var(--r-stage);padding:10px;min-width:0}
+  #camWrap{position:relative;border-radius:12px;overflow:hidden;background:#000;aspect-ratio:4/3}
   #camWrap video,#camWrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
   #camWrap.mirror video,#camWrap.mirror canvas{transform:scaleX(-1)}
-  #camOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;text-align:center;padding:20px;background:rgba(0,0,0,.55)}
-  #countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;font-size:96px;font-weight:800;color:#fff;text-shadow:0 2px 12px #000;text-align:center}
-  #countdown small{font-size:20px;font-weight:700;max-width:80%}
-  #recBadge{position:absolute;top:10px;left:10px;display:none;background:var(--bad);color:#fff;padding:6px 10px;border-radius:999px;font-weight:700;font-size:14px}
+  #camOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;color:#fff;text-align:center;padding:24px;background:rgba(5,15,30,.72);font-size:16px}
+  #camOverlay > div{max-width:34ch}
+  #countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;gap:6px;font-size:104px;line-height:1;font-weight:700;color:#fff;text-shadow:0 2px 14px #000;text-align:center;background:rgba(5,15,30,.35)}
+  #countdown small{font-size:19px;line-height:1.3;max-width:80%}
+  #recBadge{position:absolute;top:10px;left:10px;display:none;background:var(--bad);color:#fff;padding:5px 11px;border-radius:99px;font-weight:700;font-size:14px}
   #recBar{position:absolute;left:0;bottom:0;height:6px;width:0;background:var(--bad)}
-  .live{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:14px;color:var(--muted)}
-  .live span:first-child{min-width:0;flex:0 1 70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .bar{flex:1;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
-  .bar>i{display:block;height:100%;width:0;background:var(--pri);transition:width .1s}
-  #liveMovBar{background:var(--mov)}
-  #said{font-size:34px;font-weight:800;text-align:center;min-height:52px;margin:6px 0;word-break:break-word}
-  #history{list-style:none;padding:0;margin:0;font-size:15px;color:var(--muted);max-height:160px;overflow:auto}
-  #history li{padding:4px 0;border-bottom:1px dashed var(--line)}
-  .row{display:flex;gap:8px;align-items:center}
-  .row input[type=text]{flex:1}
-  input[type=text],input[type=search],select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px}
-  .cls{padding:10px 0;border-bottom:1px solid var(--line)}
-  .cls:last-child{border-bottom:0}
+  .live{display:flex;align-items:center;gap:10px;margin:10px 6px 0;font-size:14px;color:var(--stage-ink)}
+  .live span:first-child{min-width:0;flex:0 1 68%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar{flex:1;height:6px;background:var(--stage-line);border-radius:99px;overflow:hidden}
+  .bar > i{display:block;height:100%;width:0;background:#2CC7C2;transition:width .1s linear}
+  #liveMovBar{background:var(--voice)}
+  .stage .hint{color:var(--stage-muted);margin:6px 6px 2px;max-width:none}
+
+  /* ---------- Lo que la app dice: el elemento principal ---------- */
+  .voice{background:var(--voice);color:var(--voice-ink);border-radius:var(--r-stage);padding:18px 18px 14px}
+  #said{font-size:clamp(30px,6.2vw,44px);line-height:1.1;font-weight:700;letter-spacing:-.015em;min-height:1.1em;word-break:break-word}
+  #said:empty::before{content:"Lo que digas con tus señas aparece acá";font-size:19px;line-height:1.35;font-weight:400;letter-spacing:0;opacity:.75;display:block}
+  #said.pop{animation:pop .28s ease-out}
+  @keyframes pop{from{transform:scale(.96);opacity:.5}to{transform:none;opacity:1}}
+  .voice .row{margin-top:14px;flex-wrap:wrap;justify-content:space-between}
+  .voice .btn.sec{background:rgba(11,37,69,.1);border-color:transparent;color:var(--voice-ink)}
+  .voice .switch{padding:0;gap:10px;font-size:15px}
+  .voice input[type=checkbox]{background:rgba(11,37,69,.28)}
+  .voice input[type=checkbox]:checked{background:var(--voice-ink)}
+  #history{list-style:none;padding:0;margin:0;font-size:15px;color:var(--muted);max-height:168px;overflow:auto}
+  #history li{padding:6px 0;border-top:1px solid var(--line)}
+  #history li:first-child{border-top:0;color:var(--ink)}
+  #history:empty::before{content:"Todavía no dijiste nada.";display:block;padding:2px 0}
+
+  /* ---------- Controles ---------- */
+  .btn{appearance:none;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;border:1px solid transparent;border-radius:var(--r-ctl);padding:9px 16px;font:inherit;font-size:16px;font-weight:700;line-height:1.2;background:var(--pri);color:var(--pri-ink);cursor:pointer;text-decoration:none;text-align:center}
+  .btn.sec{background:transparent;color:var(--ink);border-color:var(--line)}
+  .btn.bad{background:var(--bad);color:#fff;border-color:transparent}
+  .btn.mov{background:var(--mov);color:#fff}
+  .btn:disabled{opacity:.45;cursor:default}
+  .btn.big{width:100%;min-height:52px;font-size:17px}
+  .btn.sm{min-height:36px;padding:6px 11px;font-size:14px;border-radius:8px}
+  .btn.rec::before{content:"";width:9px;height:9px;border-radius:50%;background:currentColor;flex:none}
+  @media (hover:hover){ .btn:not(:disabled):hover{filter:brightness(1.08)} .btn.sec:not(:disabled):hover{background:var(--none-bg);filter:none} }
+  input[type=text],input[type=search],select,textarea{width:100%;min-height:44px;padding:10px 12px;border-radius:var(--r-ctl);border:1px solid var(--line);background:var(--bg);color:var(--ink);font:inherit;font-size:16px}
+  textarea{resize:vertical}
+  input[type=range]{width:100%;accent-color:var(--pri);height:28px}
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 0;cursor:pointer}
+  input[type=checkbox]{appearance:none;flex:none;width:46px;height:28px;border-radius:99px;background:var(--line);position:relative;cursor:pointer;transition:background .15s;margin:0}
+  input[type=checkbox]::after{content:"";position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:#fff;transition:transform .15s}
+  input[type=checkbox]:checked{background:var(--pri)}
+  input[type=checkbox]:checked::after{transform:translateX(18px)}
+
+  /* ---------- Lista de señas ---------- */
+  .cls{padding:14px 0;border-top:1px solid var(--line)}
+  .cls:first-child{border-top:0;padding-top:4px}
   .cls .top{display:flex;gap:8px;align-items:center}
-  .cls .top input{flex:1}
-  .cls .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted);margin-top:6px}
-  .cls .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
-  .cls select{width:auto;padding:6px 8px;font-size:14px}
-  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700}
-  .pill.ok{background:#dcfce7;color:#14532d}.pill.low{background:#fef3c7;color:#78350f}.pill.none{background:#fee2e2;color:#7f1d1d}
-  .pill.src{background:var(--line);color:var(--ink)}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
-  .grid .btn{min-height:84px;font-size:18px;white-space:normal;text-align:center}
-  .pack{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
-  .pack:last-child{border-bottom:0}
+  .cls .top input{flex:1;min-width:0;font-weight:700;font-size:18px;background:transparent;border-color:transparent;padding-left:0;min-height:36px}
+  .cls .top input:hover{border-color:var(--line);padding-left:10px}
+  .cls .top input:focus{background:var(--bg);border-color:var(--line);padding-left:10px}
+  .cls .top strong{font-size:18px}
+  .cls .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted);margin-top:4px}
+  .cls .meta select{width:auto;min-height:30px;padding:3px 8px;font-size:13.5px;border-radius:8px}
+  .cls .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-size:12.5px;font-weight:700;line-height:1.5}
+  .pill.ok{background:var(--ok-bg);color:var(--ok-ink)} .pill.low{background:var(--low-bg);color:var(--low-ink)} .pill.none{background:var(--none-bg);color:var(--none-ink)}
+  .pill.src{background:transparent;color:var(--muted);border:1px solid var(--line);font-weight:400}
+  .pack{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line)}
+  .pack:first-child{border-top:0}
   .pack .n{font-size:13px;color:var(--muted)}
-  details summary{cursor:pointer;font-weight:700}
-  label.f{display:block;margin:12px 0 6px;font-weight:700}
-  .hint{font-size:14px;color:var(--muted)}
-  .switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
-  .switch input{width:24px;height:24px}
-  input[type=range]{width:100%}
-  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;font-weight:600;display:none;z-index:20;max-width:90vw;text-align:center}
-  [hidden]{display:none!important}
+  #vidLog > div{padding:2px 0}
+
+  /* ---------- Tablero de frases ---------- */
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+  .grid .btn{min-height:88px;font-size:19px;white-space:normal;border-radius:var(--r-card);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-bottom-width:3px}
+  .grid .btn:active{background:var(--voice);color:var(--voice-ink);border-color:var(--voice)}
+
+  #toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);background:var(--stage);color:var(--stage-ink);border:1px solid var(--stage-line);padding:12px 18px;border-radius:12px;font-weight:700;font-size:15px;display:none;z-index:20;max-width:min(92vw,520px);text-align:center}
+
+  /* ---------- Pantallas anchas: cámara a la izquierda, panel a la derecha ---------- */
+  @media (min-width:900px){
+    body{padding-bottom:0}
+    header{padding:0 28px;gap:28px;min-height:64px}
+    nav{position:static;display:flex;gap:4px;background:transparent;border:0;padding:0;align-self:stretch}
+    nav button{flex-direction:row;gap:8px;font-size:15px;padding:0 14px;color:var(--stage-muted);border-radius:0;border-bottom:3px solid transparent;border-top:3px solid transparent}
+    nav button svg{width:20px;height:20px}
+    nav button.on{color:#fff;background:transparent;border-bottom-color:var(--voice)}
+    main{max-width:1180px;padding:24px 28px;gap:24px;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:start}
+    main.nocam{max-width:760px;grid-template-columns:minmax(0,1fr)}
+    .stage{position:sticky;top:20px}
+    #toast{bottom:28px}
+  }
+  @media (prefers-reduced-motion:reduce){ *{animation:none!important;transition:none!important} }
 </style>
 </head>
 <body>
 <header>
-  <h1>🗣️ Voz con Gestos</h1>
+  <div class="brand">
+    <svg width="30" height="30" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <rect width="32" height="32" rx="9" fill="#F6C445"/>
+      <path d="M11 22V12.5a1.6 1.6 0 0 1 3.2 0V17M14.2 16V10.5a1.6 1.6 0 0 1 3.2 0V16M17.4 16.5v-4a1.6 1.6 0 0 1 3.2 0V20c0 3-2 5-5 5h-1c-2 0-3.2-.8-4.3-2.6L8.4 19a1.5 1.5 0 0 1 2.6-1.5" stroke="#0B2545" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M23.5 9.5c1.2 1.2 1.2 3.2 0 4.4M25.8 7.4c2.3 2.4 2.3 6.2 0 8.6" stroke="#0B2545" stroke-width="1.8" stroke-linecap="round"/>
+    </svg>
+    <h1>Voz con Gestos</h1>
+  </div>
+  <nav aria-label="Secciones">
+    <button data-tab="hablar" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>Hablar</button>
+    <button data-tab="entrenar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>Entrenar</button>
+    <button data-tab="frases"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="1.5"/><rect x="13" y="4" width="7" height="7" rx="1.5"/><rect x="4" y="13" width="7" height="7" rx="1.5"/><rect x="13" y="13" width="7" height="7" rx="1.5"/></svg>Frases</button>
+    <button data-tab="ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"/><circle cx="16" cy="7" r="2"/><circle cx="8" cy="17" r="2"/></svg>Ajustes</button>
+  </nav>
   <span id="status">Cámara apagada</span>
 </header>
-<nav>
-  <button data-tab="hablar" class="on">Hablar</button>
-  <button data-tab="entrenar">Entrenar</button>
-  <button data-tab="frases">Frases</button>
-  <button data-tab="ajustes">Ajustes</button>
-</nav>
 
 <main>
-  <section id="camSection" class="card">
+  <section id="camSection" class="stage">
     <div id="camWrap" class="mirror">
       <video id="video" playsinline muted></video>
       <canvas id="overlay"></canvas>
-      <div id="recBadge">● Grabando</div>
+      <div id="recBadge">Grabando</div>
       <div id="recBar"></div>
       <div id="countdown"></div>
       <div id="camOverlay">
         <div>Activá la cámara para empezar. El video no sale de este dispositivo.</div>
-        <button class="btn" id="startBtn">📷 Activar cámara</button>
+        <button class="btn" id="startBtn">Activar cámara</button>
       </div>
     </div>
     <div class="live"><span id="liveLabel">Quieta: —</span><div class="bar"><i id="liveBar"></i></div></div>
     <div class="live"><span id="liveMov">Movimiento: —</span><div class="bar"><i id="liveMovBar"></i></div></div>
-    <div class="hint" id="liveDiag" style="font-size:12px;margin-top:4px"></div>
+    <div class="hint" id="liveDiag" style="font-size:12.5px"></div>
   </section>
 
   <!-- HABLAR -->
   <section data-panel="hablar">
-    <div class="card">
-      <div id="said">…</div>
-      <div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">
-        <button class="btn sec" id="repeatBtn">🔁 Repetir</button>
-        <label class="switch" style="padding:0"><span>Hablar automáticamente</span><input type="checkbox" id="autoChk"></label>
+    <div class="voice">
+      <div id="said" aria-live="polite"></div>
+      <div class="row">
+        <button class="btn sec" id="repeatBtn">Repetir</button>
+        <label class="switch"><span>Hablar automáticamente</span><input type="checkbox" id="autoChk"></label>
       </div>
     </div>
     <div class="card">
@@ -140,24 +231,24 @@
           <b>Seña quieta</b> (una postura de la mano o la cara): tocá Grabar y sostené la postura 3 s moviéndola apenas.<br>
           <b>Seña con movimiento</b> (la mayoría de la LSA): tocá Grabar, empezá quieto, hacé la seña <u>una sola vez</u> y volvé a quedarte quieto. Repetilo al menos <b>3 veces</b> (ideal 5).<br>
           En <b>modo cara</b>, “movimiento” sirve para palabras modulando con la boca.<br>
-          Cada palabra de los libros tiene ▶ para ver el video oficial y aprender la seña.
+          Cada palabra de los libros tiene un botón Video para ver el video oficial y aprender la seña.
         </p>
       </details>
     </div>
     <div class="card">
       <details id="packsBox">
-        <summary>📚 Vocabulario LSA (Señario 2 y Cuadernillo)</summary>
+        <summary>Vocabulario LSA (Señario 2 y Cuadernillo)</summary>
         <p class="hint">Agregá categorías de palabras. Después grabá solo las que vayas a usar.</p>
         <div id="packList"></div>
       </details>
     </div>
     <div class="card">
       <details>
-        <summary>🎞 Entrenar desde videos</summary>
+        <summary>Entrenar desde videos</summary>
         <p class="hint">
           Elegí uno o varios videos de señas (un video por seña). Si el archivo se llama como la palabra
           (ej.: <code>Agua.mp4</code>, <code>Pasado mañana.mp4</code>), se asigna solo; si no existe, se crea.
-          También podés usar el botón <b>🎞 Desde video</b> de cada palabra.
+          También podés usar el botón <b>Desde video</b> de cada palabra.
           Usá videos propios o con permiso de quien los hizo.<br>
           <b>Dataset LSA64:</b> si elegís los videos de LSA64 (nombres como <code>022_003_001.mp4</code>), la app reconoce sola qué seña es cada uno y guarda hasta 8 ejemplos por seña, de personas distintas. En la PC podés elegir la carpeta entera.
         </p>
@@ -200,7 +291,7 @@
     <div class="card">
       <label class="f" for="freeText">Escribir y decir</label>
       <textarea id="freeText" rows="2" placeholder="Escribí lo que quieras decir…"></textarea>
-      <div style="margin-top:8px"><button class="btn big" id="sayFreeBtn">🔊 Decir</button></div>
+      <div style="margin-top:8px"><button class="btn big" id="sayFreeBtn">Decir</button></div>
     </div>
   </section>
 
@@ -223,7 +314,7 @@
 
       <label class="f" for="voiceSel">Voz</label>
       <select id="voiceSel"></select>
-      <div style="margin-top:8px"><button class="btn sec" id="testVoiceBtn">🔊 Probar voz</button></div>
+      <div style="margin-top:8px"><button class="btn sec" id="testVoiceBtn">Probar voz</button></div>
       <p class="hint" id="voiceInfo"></p>
 
       <label class="f" for="rateRng">Velocidad de la voz: <span id="rateVal"></span></label>
@@ -243,8 +334,8 @@
       <strong>Copia de seguridad</strong>
       <p class="hint">Lo entrenado queda guardado en este navegador y sigue ahí al volver a abrir la app desde la misma dirección. Para llevarlo a otro dispositivo, usá Exportar e Importar. Para que <b>todos</b> los dispositivos arranquen ya entrenados, subí el archivo exportado junto a la app con el nombre <code>entrenamiento.json</code>.</p>
       <div class="row" style="flex-wrap:wrap">
-        <button class="btn sec" id="exportBtn">⬇️ Exportar</button>
-        <label class="btn sec" for="importFile">⬆️ Importar</label>
+        <button class="btn sec" id="exportBtn">Exportar</button>
+        <label class="btn sec" for="importFile">Importar</label>
         <input type="file" id="importFile" accept="application/json,.json" hidden>
         <button class="btn bad" id="resetBtn">Borrar todo</button>
       </div>
@@ -351,6 +442,7 @@ document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click
   document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
   document.querySelectorAll("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== tab));
   $("camSection").hidden = !(tab === "hablar" || tab === "entrenar");
+  document.querySelector("main").classList.toggle("nocam", $("camSection").hidden);
   render();
 }));
 let toastT;
@@ -399,7 +491,8 @@ function speak(text) {
 let lastSaid = "";
 function say(text) {
   lastSaid = text;
-  $("said").textContent = text;
+  const sd = $("said"); sd.textContent = text;
+  sd.classList.remove("pop"); void sd.offsetWidth; sd.classList.add("pop");
   const li = document.createElement("li");
   li.textContent = `${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} — ${text}`;
   $("history").prepend(li);
@@ -1088,7 +1181,7 @@ function classRow(c) {
   const n = countFor(c), mov = c.kind === "mov";
   const row = document.createElement("div"); row.className = "cls";
   const top = document.createElement("div"); top.className = "top";
-  if (c.id === REST) { const t = document.createElement("strong"); t.textContent = "😐 " + c.text; top.appendChild(t); }
+  if (c.id === REST) { const t = document.createElement("strong"); t.textContent = c.text; top.appendChild(t); }
   else {
     const inp = document.createElement("input"); inp.type = "text"; inp.value = c.text; inp.maxLength = 120;
     inp.onchange = () => { c.text = inp.value.trim() || c.text; save(); renderPhrases(); };
@@ -1099,7 +1192,7 @@ function classRow(c) {
   const meta = document.createElement("div"); meta.className = "meta";
   if (c.id !== REST) {
     const sel = document.createElement("select");
-    sel.innerHTML = '<option value="quieta">✋ Quieta</option><option value="mov">🎬 Con movimiento</option>';
+    sel.innerHTML = '<option value="quieta">Seña quieta</option><option value="mov">Con movimiento</option>';
     sel.value = c.kind;
     sel.onchange = () => { c.kind = sel.value; trained(); render(); };
     meta.appendChild(sel);
@@ -1115,17 +1208,17 @@ function classRow(c) {
   row.appendChild(meta);
 
   const acts = document.createElement("div"); acts.className = "acts";
-  const recB = document.createElement("button"); recB.className = "btn sm " + (mov ? "mov" : ""); recB.textContent = "⏺ Grabar"; recB.onclick = () => record(c);
+  const recB = document.createElement("button"); recB.className = "btn sm rec " + (mov ? "mov" : ""); recB.textContent = "Grabar"; recB.onclick = () => record(c);
   acts.append(recB);
   if (c.id !== REST) {
-    const vb = document.createElement("button"); vb.className = "btn sm sec"; vb.textContent = "🎞 Desde video";
+    const vb = document.createElement("button"); vb.className = "btn sm sec"; vb.textContent = "Desde video";
     vb.onclick = () => { vidTarget = c; $("vidOne").click(); };
     acts.append(vb);
   }
-  if (c.video) { const a = document.createElement("a"); a.className = "btn sm sec"; a.href = c.video; a.target = "_blank"; a.rel = "noopener"; a.textContent = "▶ Video"; acts.append(a); }
-  if (c.id !== REST) { const t = document.createElement("button"); t.className = "btn sm sec"; t.textContent = "🔊"; t.onclick = () => speak(c.text); acts.append(t); }
+  if (c.video) { const a = document.createElement("a"); a.className = "btn sm sec"; a.href = c.video; a.target = "_blank"; a.rel = "noopener"; a.textContent = "Video"; acts.append(a); }
+  if (c.id !== REST) { const t = document.createElement("button"); t.className = "btn sm sec"; t.textContent = "Escuchar"; t.onclick = () => speak(c.text); acts.append(t); }
   const clr = document.createElement("button"); clr.className = "btn sm sec";
-  clr.textContent = n > 0 || c.id === REST ? "🗑 Grabaciones" : "🗑 Quitar";
+  clr.textContent = n > 0 || c.id === REST ? "Borrar grabaciones" : "Quitar";
   clr.onclick = () => confirmInline(clr, () => {
     const mode = state.settings.mode;
     if (n > 0 || c.id === REST) { c.samples = c.samples.filter((s) => !hasPart(s, mode)); c.seqs = c.seqs.filter((s) => s.m !== mode); }
