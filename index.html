@@ -1,0 +1,1256 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0f766e">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>Voz con Gestos</title>
+<style>
+  :root{
+    --bg:#f6f7f4; --card:#fff; --ink:#14201d; --muted:#5b6a66; --line:#dfe5e2;
+    --pri:#0f766e; --pri-ink:#fff; --bad:#b91c1c; --mov:#7c3aed;
+    --radius:16px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{ --bg:#0e1513; --card:#17211e; --ink:#eef4f2; --muted:#9fb1ac; --line:#2a3834; --pri:#2dd4bf; --pri-ink:#062b27; --mov:#a78bfa; }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--pri);color:var(--pri-ink)}
+  header h1{font-size:20px;margin:0}
+  #status{font-size:13px;opacity:.9}
+  nav{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:5}
+  nav button{border:0;background:transparent;color:var(--muted);padding:10px 4px;border-radius:10px;font-size:15px;font-weight:600}
+  nav button.on{background:var(--pri);color:var(--pri-ink)}
+  main{max-width:760px;margin:0 auto;padding:12px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:14px;margin-bottom:12px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:12px;padding:12px 16px;font-size:16px;font-weight:700;background:var(--pri);color:var(--pri-ink);cursor:pointer;text-decoration:none}
+  .btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+  .btn.bad{background:var(--bad);color:#fff}
+  .btn.mov{background:var(--mov);color:#fff}
+  .btn:disabled{opacity:.45}
+  .btn.big{width:100%;padding:16px;font-size:18px}
+  .btn.sm{padding:8px 10px;font-size:14px}
+  #camWrap{position:relative;border-radius:var(--radius);overflow:hidden;background:#000;aspect-ratio:4/3}
+  #camWrap video,#camWrap canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+  #camWrap.mirror video,#camWrap.mirror canvas{transform:scaleX(-1)}
+  #camOverlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:#fff;text-align:center;padding:20px;background:rgba(0,0,0,.55)}
+  #countdown{position:absolute;inset:0;display:none;align-items:center;justify-content:center;flex-direction:column;font-size:96px;font-weight:800;color:#fff;text-shadow:0 2px 12px #000;text-align:center}
+  #countdown small{font-size:20px;font-weight:700;max-width:80%}
+  #recBadge{position:absolute;top:10px;left:10px;display:none;background:var(--bad);color:#fff;padding:6px 10px;border-radius:999px;font-weight:700;font-size:14px}
+  #recBar{position:absolute;left:0;bottom:0;height:6px;width:0;background:var(--bad)}
+  .live{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-top:8px;font-size:14px;color:var(--muted)}
+  .live span:first-child{min-width:0;flex:0 1 70%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar{flex:1;height:8px;background:var(--line);border-radius:99px;overflow:hidden}
+  .bar>i{display:block;height:100%;width:0;background:var(--pri);transition:width .1s}
+  #liveMovBar{background:var(--mov)}
+  #said{font-size:34px;font-weight:800;text-align:center;min-height:52px;margin:6px 0;word-break:break-word}
+  #history{list-style:none;padding:0;margin:0;font-size:15px;color:var(--muted);max-height:160px;overflow:auto}
+  #history li{padding:4px 0;border-bottom:1px dashed var(--line)}
+  .row{display:flex;gap:8px;align-items:center}
+  .row input[type=text]{flex:1}
+  input[type=text],input[type=search],select,textarea{width:100%;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--bg);color:var(--ink);font-size:16px}
+  .cls{padding:10px 0;border-bottom:1px solid var(--line)}
+  .cls:last-child{border-bottom:0}
+  .cls .top{display:flex;gap:8px;align-items:center}
+  .cls .top input{flex:1}
+  .cls .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted);margin-top:6px}
+  .cls .acts{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+  .cls select{width:auto;padding:6px 8px;font-size:14px}
+  .pill{display:inline-block;padding:2px 8px;border-radius:99px;font-size:12px;font-weight:700}
+  .pill.ok{background:#dcfce7;color:#14532d}.pill.low{background:#fef3c7;color:#78350f}.pill.none{background:#fee2e2;color:#7f1d1d}
+  .pill.src{background:var(--line);color:var(--ink)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+  .grid .btn{min-height:84px;font-size:18px;white-space:normal;text-align:center}
+  .pack{display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line)}
+  .pack:last-child{border-bottom:0}
+  .pack .n{font-size:13px;color:var(--muted)}
+  details summary{cursor:pointer;font-weight:700}
+  label.f{display:block;margin:12px 0 6px;font-weight:700}
+  .hint{font-size:14px;color:var(--muted)}
+  .switch{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0}
+  .switch input{width:24px;height:24px}
+  input[type=range]{width:100%}
+  #toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:12px 16px;border-radius:12px;font-weight:600;display:none;z-index:20;max-width:90vw;text-align:center}
+  [hidden]{display:none!important}
+</style>
+</head>
+<body>
+<header>
+  <h1>🗣️ Voz con Gestos</h1>
+  <span id="status">Cámara apagada</span>
+</header>
+<nav>
+  <button data-tab="hablar" class="on">Hablar</button>
+  <button data-tab="entrenar">Entrenar</button>
+  <button data-tab="frases">Frases</button>
+  <button data-tab="ajustes">Ajustes</button>
+</nav>
+
+<main>
+  <section id="camSection" class="card">
+    <div id="camWrap" class="mirror">
+      <video id="video" playsinline muted></video>
+      <canvas id="overlay"></canvas>
+      <div id="recBadge">● Grabando</div>
+      <div id="recBar"></div>
+      <div id="countdown"></div>
+      <div id="camOverlay">
+        <div>Activá la cámara para empezar. El video no sale de este dispositivo.</div>
+        <button class="btn" id="startBtn">📷 Activar cámara</button>
+      </div>
+    </div>
+    <div class="live"><span id="liveLabel">Quieta: —</span><div class="bar"><i id="liveBar"></i></div></div>
+    <div class="live"><span id="liveMov">Movimiento: —</span><div class="bar"><i id="liveMovBar"></i></div></div>
+    <div class="hint" id="liveDiag" style="font-size:12px;margin-top:4px"></div>
+  </section>
+
+  <!-- HABLAR -->
+  <section data-panel="hablar">
+    <div class="card">
+      <div id="said">…</div>
+      <div class="row" style="justify-content:center;gap:10px;flex-wrap:wrap">
+        <button class="btn sec" id="repeatBtn">🔁 Repetir</button>
+        <label class="switch" style="padding:0"><span>Hablar automáticamente</span><input type="checkbox" id="autoChk"></label>
+      </div>
+    </div>
+    <div class="card">
+      <strong>Historial</strong>
+      <ul id="history"></ul>
+    </div>
+    <div class="card">
+      <label class="f" for="movRng2" style="margin-top:0">Tolerancia de señas con movimiento: <span id="movVal2"></span></label>
+      <input type="range" id="movRng2" min="0.5" max="2.5" step="0.1">
+      <p class="hint" style="margin-bottom:0">La app habla cuando el parecido llega a <b>100%</b>. Si muestra la seña correcta pero con menos de 100%, subí la tolerancia. Si habla sola o se confunde, bajala.</p>
+    </div>
+    <div class="card hint" id="emptyHint">
+      Todavía no hay señas entrenadas. Andá a <b>Entrenar</b>, grabá primero el <b>Reposo</b> y después cada frase o seña.
+    </div>
+  </section>
+
+  <!-- ENTRENAR -->
+  <section data-panel="entrenar" hidden>
+    <div class="card">
+      <details>
+        <summary>¿Cómo entrenar?</summary>
+        <p class="hint">
+          <b>Reposo:</b> grabalo primero, en tu postura normal sin hacer nada.<br>
+          <b>Seña quieta</b> (una postura de la mano o la cara): tocá Grabar y sostené la postura 3 s moviéndola apenas.<br>
+          <b>Seña con movimiento</b> (la mayoría de la LSA): tocá Grabar, empezá quieto, hacé la seña <u>una sola vez</u> y volvé a quedarte quieto. Repetilo al menos <b>3 veces</b> (ideal 5).<br>
+          En <b>modo cara</b>, “movimiento” sirve para palabras modulando con la boca.<br>
+          Cada palabra de los libros tiene ▶ para ver el video oficial y aprender la seña.
+        </p>
+      </details>
+    </div>
+    <div class="card">
+      <details id="packsBox">
+        <summary>📚 Vocabulario LSA (Señario 2 y Cuadernillo)</summary>
+        <p class="hint">Agregá categorías de palabras. Después grabá solo las que vayas a usar.</p>
+        <div id="packList"></div>
+      </details>
+    </div>
+    <div class="card">
+      <details>
+        <summary>🎞 Entrenar desde videos</summary>
+        <p class="hint">
+          Elegí uno o varios videos de señas (un video por seña). Si el archivo se llama como la palabra
+          (ej.: <code>Agua.mp4</code>, <code>Pasado mañana.mp4</code>), se asigna solo; si no existe, se crea.
+          También podés usar el botón <b>🎞 Desde video</b> de cada palabra.
+          Usá videos propios o con permiso de quien los hizo.<br>
+          <b>Dataset LSA64:</b> si elegís los videos de LSA64 (nombres como <code>022_003_001.mp4</code>), la app reconoce sola qué seña es cada uno y guarda hasta 8 ejemplos por seña, de personas distintas. En la PC podés elegir la carpeta entera.
+        </p>
+        <label class="switch"><span>Invertir (si la persona que va a usar la app es zurda)</span><input type="checkbox" id="vidMirror"></label>
+        <label class="btn big" for="vidFiles">Elegir videos…</label>
+        <input type="file" id="vidFiles" multiple hidden>
+        <input type="file" id="vidOne" hidden>
+        <label class="btn big sec" for="vidDir" style="margin-top:8px">Elegir carpeta entera (PC)…</label>
+        <input type="file" id="vidDir" webkitdirectory multiple hidden>
+        <div id="vidLog" class="hint" style="margin-top:8px;max-height:200px;overflow:auto" hidden></div>
+      </details>
+    </div>
+    <div class="card">
+      <div class="row" style="margin-bottom:6px">
+        <input type="search" id="filterTxt" placeholder="Buscar palabra o frase…">
+        <select id="filterSel" style="width:auto">
+          <option value="all">Todas</option>
+          <option value="todo">Sin entrenar</option>
+          <option value="done">Entrenadas</option>
+        </select>
+      </div>
+      <div id="classList"></div>
+      <div class="hint" id="listMore"></div>
+    </div>
+    <div class="card">
+      <label class="f" for="newText">Agregar frase propia</label>
+      <div class="row">
+        <input type="text" id="newText" placeholder="Ej.: Tengo frío" maxlength="120">
+        <button class="btn" id="addBtn">Agregar</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- FRASES -->
+  <section data-panel="frases" hidden>
+    <div class="card">
+      <p class="hint" style="margin-top:0">Respaldo táctil: tocá para decirla en voz alta. Se muestran tus frases y las palabras que ya entrenaste.</p>
+      <div class="grid" id="phraseGrid"></div>
+    </div>
+    <div class="card">
+      <label class="f" for="freeText">Escribir y decir</label>
+      <textarea id="freeText" rows="2" placeholder="Escribí lo que quieras decir…"></textarea>
+      <div style="margin-top:8px"><button class="btn big" id="sayFreeBtn">🔊 Decir</button></div>
+    </div>
+  </section>
+
+  <!-- AJUSTES -->
+  <section data-panel="ajustes" hidden>
+    <div class="card">
+      <label class="f" for="modeSel">Qué detectar</label>
+      <select id="modeSel">
+        <option value="manos">Manos (gestos o señas)</option>
+        <option value="cara">Cara y boca (gestos o palabras moduladas)</option>
+        <option value="ambos">Manos + cara</option>
+      </select>
+      <p class="hint">Cada modo usa sus propias grabaciones: si cambiás de modo, hay que entrenar de nuevo.</p>
+
+      <label class="f" for="facingSel">Cámara</label>
+      <select id="facingSel">
+        <option value="user">Frontal</option>
+        <option value="environment">Trasera</option>
+      </select>
+
+      <label class="f" for="voiceSel">Voz</label>
+      <select id="voiceSel"></select>
+      <div style="margin-top:8px"><button class="btn sec" id="testVoiceBtn">🔊 Probar voz</button></div>
+      <p class="hint" id="voiceInfo"></p>
+
+      <label class="f" for="rateRng">Velocidad de la voz: <span id="rateVal"></span></label>
+      <input type="range" id="rateRng" min="0.6" max="1.6" step="0.1">
+
+      <label class="f" for="holdRng">Señas quietas: tiempo sosteniendo <span id="holdVal"></span></label>
+      <input type="range" id="holdRng" min="200" max="2000" step="100">
+
+      <label class="f" for="confRng">Señas quietas: seguridad mínima <span id="confVal"></span></label>
+      <input type="range" id="confRng" min="0.4" max="0.95" step="0.05">
+
+      <label class="f" for="movRng">Señas con movimiento: tolerancia <span id="movVal"></span></label>
+      <input type="range" id="movRng" min="0.5" max="2.5" step="0.1">
+      <p class="hint">Si no reconoce, subila. Si dispara solo, bajala.</p>
+    </div>
+    <div class="card">
+      <strong>Copia de seguridad</strong>
+      <p class="hint">Lo entrenado queda guardado en este navegador y sigue ahí al volver a abrir la app desde la misma dirección. Para llevarlo a otro dispositivo, usá Exportar e Importar. Para que <b>todos</b> los dispositivos arranquen ya entrenados, subí el archivo exportado junto a la app con el nombre <code>entrenamiento.json</code>.</p>
+      <div class="row" style="flex-wrap:wrap">
+        <button class="btn sec" id="exportBtn">⬇️ Exportar</button>
+        <label class="btn sec" for="importFile">⬆️ Importar</label>
+        <input type="file" id="importFile" accept="application/json,.json" hidden>
+        <button class="btn bad" id="resetBtn">Borrar todo</button>
+      </div>
+      <p class="hint" id="storageInfo"></p>
+    </div>
+    <div class="card hint">
+      Vocabulario: <i>Señario 2</i>, Confederación Argentina de Sordos (2022), con videos en <a href="https://cas.org.ar">cas.org.ar</a>; y <i>Cuadernillo Guía Introductorio de LSA</i>, P. Giancatarino (2012). Dataset <i>LSA64</i>: Ronchetti, Quiroga, Estrebou, Lanzarini y Rosete (UNLP, 2016), <a href="https://facundoq.github.io/datasets/lsa64/">facundoq.github.io/datasets/lsa64</a>, licencia CC BY-NC-SA 4.0 (uso no comercial).
+    </div>
+  </section>
+</main>
+<div id="toast"></div>
+
+<script type="module">
+import { FilesetResolver, HandLandmarker, FaceLandmarker, PoseLandmarker } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/vision_bundle.mjs";
+
+const WASM = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm";
+const HAND_MODEL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task";
+const FACE_MODEL = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
+const POSE_MODEL = "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task";
+const FV = 4;   // versión del formato de rasgos
+
+const PACKS = [{"id":"s2-0","name":"El tiempo: Señas generales","src":"Señario 2 · CAS","video":"https://bit.ly/3zTuwEz","words":["Ahora","Anteayer","Ayer","Calendario","Después (1)","Después (2)","Durar","En punto","Época","Fecha","Futuro","Hora","Hoy","Mañana","Minuto","Momento","Pasado","Pasado mañana","Período","Presente","Segundo","Siglo","Tiempo (cronológico)","Todos los días"]},{"id":"s2-1","name":"El tiempo: Partes del día","src":"Señario 2 · CAS","video":"https://bit.ly/3xQxWq7","words":["Amanecer","Cena","Desayuno","Madrugada","Mañana","Mediodía","Merienda","Noche","Tarde"]},{"id":"s2-2","name":"El tiempo: La semana","src":"Señario 2 · CAS","video":"https://bit.ly/3OabugO","words":["Día","Día de la semana","Domingo","Fin de semana","Jueves","Lunes","Lunes a domingo","Lunes a viernes","Martes","Miércoles","Sábado","Semana","Viernes"]},{"id":"s2-3","name":"El tiempo: Meses del año","src":"Señario 2 · CAS","video":"https://bit.ly/3HlDrAh","words":["Abril","Agosto","Anual","Año","Diciembre","Doce meses","Enero","Febrero","Julio","Junio","Marzo","Mayo","Mes","Meses","Noviembre","Octubre","Por el periodo de un año","Por mes","Septiembre"]},{"id":"s2-4","name":"El tiempo: Estaciones del año","src":"Señario 2 · CAS","video":"https://bit.ly/3Qk0uPP","words":["Estaciones del año","Invierno","Otoño","Primavera","Verano"]},{"id":"s2-5","name":"Comidas: Señas generales","src":"Señario 2 · CAS","video":"https://bit.ly/3OabUno","words":["Aceite","Arroz","Asado","Atún en lata","Carne","Carne picada","Chorizo","Comer","Comida","Empanadas","Fiambres","Fideos","Guiso","Hamburguesa","Huevo","Jamón cocido","Mortadela","Omelette","Pancho","Papas fritas","Pechuga de pollo","Pescado","Pizza","Pollo","Queso","Queso cremoso","Queso de máquina","Queso rallado","Sal","Salame","Salchicha","Sopa","Torta","Vinagre"]},{"id":"s2-6","name":"Comidas: La merienda","src":"Señario 2 · CAS","video":"https://bit.ly/3zD289i","words":["Azúcar","Caramelo","Chicle","Chocolatada","Chocolate","Chupetín","Churro","Dulce de leche","Dulces","Ensalada de frutas","Factura","Flan","Galletita","Gelatina","Helado","Leche","Manteca","Merienda","Mermelada","Miel","Pan","Panqueque","Pastel","Postre","Sandwich","Torta frita","Tostada","Yogur"]},{"id":"s2-7","name":"Comidas: Verduras","src":"Señario 2 · CAS","video":"https://bit.ly/3QfZPix","words":["Acelga","Ajo","Apio","Arvejas","Batata","Berenjena","Cebolla","Cebolla de verdeo","Choclo","Lechuga","Lentejas","Morrón rojo","Palta","Papa","Pepino","Porotos","Repollo","Tomate","Verduras","Zanahoria","Zapallito","Zapallo"]},{"id":"s2-8","name":"Comidas: Frutas","src":"Señario 2 · CAS","video":"https://bit.ly/39mx0jF","words":["Ananá","Banana","Cereza","Ciruela","Durazno","Frutas","Frutilla","Kiwi","Limón","Mandarina","Manzana","Naranja","Pera","Pomelo","Sandía","Uva"]},{"id":"s2-9","name":"Comidas: Bebidas","src":"Señario 2 · CAS","video":"https://bit.ly/3mLkRrG","words":["7up","Agua","Bebidas","Café","Cerveza","Coca Cola","Jugo","Jugo exprimido","Mate","Mate cocido","Soda","Sprite","Té","Vino","Yerba"]},{"id":"s2-10","name":"Ropa","src":"Señario 2 · CAS","video":"https://bit.ly/3n6n7tX","words":["Alpargata","Anteojos","Bikini","Bombacha","Botas","Botines","Bufanda","Buzo","Calza","Calzoncillo","Camisa","Camiseta","Camisón","Campera","Cartera","Cinto","Collar","Corbata","Corpiño","Gorra","Guantes","Malla","Medias","Ojotas","Pantalón","Pañuelo (para el cuello)","Pañuelo (para la nariz)","Pollera","Pulsera","Remera","Ropa","Saco","Sandalia","Short","Sombrero","Vaquero (jeans)","Vestido","Zapatillas","Zapato"]},{"id":"s2-11","name":"Profesiones","src":"Señario 2 · CAS","video":"https://bit.ly/3mLvTx4","words":["Abogado/a","Basurero/a","Bombero/a","Camarero/a","Carnicero/a","Carpintero/a","Cartero/a","Chef","Chofer","Fotógrafo/a","Juez/a","Militar","Mozo/a","Músico/a","Panadero/a","Pescador/a","Pintor/a","Plomero/a","Policía","Profesiones","Secretario/a"]},{"id":"s2-12","name":"Medios de comunicación","src":"Señario 2 · CAS","video":"https://bit.ly/3n6n8Ox","words":["Antena","Cabina telefónica","Carta","Carteles","Celular","Diario","Entrevista","Fax","Medios de comunicación","Micrófono","Módem","Noticias","Prensa","Radio","Telegrama","Video"]},{"id":"s2-13","name":"Países","src":"Señario 2 · CAS","video":"https://bit.ly/39v3hoH","words":["Alemania","Argentina","Australia","Bolivia","Brasil","Canadá","Chile","China","Colombia","Costa Rica","Cuba","Ecuador","España","Estados Unidos","Francia","Haití","Honduras","India","Inglaterra","Israel","Italia","Jamaica","Japón","México","País","Países bajos (Holanda)","Países (plural)","Panamá","Paraguay","Perú","Portugal","Puerto Rico","Rusia","Suecia","Uruguay","Venezuela"]},{"id":"cu-0","name":"Personas y familia","src":"Cuadernillo LSA (Giancatarino)","video":"","words":["Bebé","Niños","Joven","Adulto","Viejo","Varón","Mujer","Hombre","Nene","Nena","Familia","Mamá","Papá","Hijo/a","Hermano/a","Sobrino/a","Tío/a","Primo/a","Abuelo/a","Nieto/a","Cuñado/a","Padrino","Madrina","Ahijado/a","Mellizos","Gemelos","Padrastro","Madrastra","Hermanastro/a"]},{"id":"cu-1","name":"Estado civil","src":"Cuadernillo LSA (Giancatarino)","video":"","words":["Soltero/a","Novio/a","Juntado/a","Casado/a","Divorciado/a","Viudo/a","Pareja","Amante"]},{"id":"cu-2","name":"Pronombres personales","src":"Cuadernillo LSA (Giancatarino)","video":"","words":["Yo","Vos","Él / Ella","Nosotros/as","Ustedes","Ellos/as"]}];
+
+const STORE = "vozgestos_v1";
+const REST = "reposo";
+const K = 7;
+const FACE_W = 3;            // peso de la cara frente a las manos
+const POS_W = 4;             // peso de la posición de la mano en el cuadro (señas con movimiento)
+const SH = 40, SF = 100;     // escalas de cuantización
+const L = 12;                // cuadros por secuencia normalizada
+const REC_STATIC_MS = 3000, REC_MOV_MS = 3000;
+const MAX_STATIC = 150, MAX_SEQS = 8;
+const ZERO63 = new Array(63).fill(0), ZERO51 = new Array(51).fill(0);
+
+const $ = (id) => document.getElementById(id);
+const uid = () => Math.random().toString(36).slice(2, 10);
+
+// ---------- Codificación compacta (int8 + base64) ----------
+function enc(a, s) {
+  if (!a) return null;
+  let str = "";
+  for (let i = 0; i < a.length; i++) {
+    let q = Math.round(a[i] * s); q = q > 127 ? 127 : q < -127 ? -127 : q;
+    str += String.fromCharCode(q & 255);
+  }
+  return btoa(str);
+}
+function dec(x, s) {
+  if (!x) return null;
+  if (Array.isArray(x)) return x;
+  const bin = atob(x), out = new Float32Array(bin.length);
+  for (let i = 0; i < bin.length; i++) { let q = bin.charCodeAt(i); if (q > 127) q -= 256; out[i] = q / s; }
+  return out;
+}
+
+// ---------- Estado ----------
+function defaultState() {
+  const frases = ["Sí", "No", "Hola", "Gracias", "Tengo sed", "Tengo hambre", "Me duele", "Necesito ir al baño", "Te quiero", "Llamá a alguien, por favor"];
+  return {
+    settings: { mode: "manos", facing: "user", voice: "", rate: 1, holdMs: 700, minConf: 0.6, movTol: 1, auto: true },
+    classes: [mkClass("Reposo (no dice nada)", "quieta", REST), ...frases.map((t) => mkClass(t, "quieta"))],
+    fv: FV,
+  };
+}
+function mkClass(text, kind, id) { return { id: id || uid(), text, kind, samples: [], seqs: [] }; }
+function normalize(s) {
+  s.settings = { ...defaultState().settings, ...(s.settings || {}) };
+  for (const c of s.classes) {
+    c.kind = c.kind || "quieta"; c.seqs = c.seqs || []; c.samples = c.samples || [];
+    c.samples = c.samples.map((x) => Array.isArray(x.h) || Array.isArray(x.f) ? { h: enc(x.h, SH), f: enc(x.f, SF) } : x);
+  }
+  if (!s.classes.some((c) => c.id === REST)) s.classes.unshift(mkClass("Reposo (no dice nada)", "quieta", REST));
+  if (s.fv !== FV) {
+    // cambió la forma de medir las manos: las grabaciones de manos anteriores ya no sirven
+    let lost = 0;
+    for (const c of s.classes) {
+      lost += c.seqs.filter((q) => q.m !== "cara").length + c.samples.filter((q) => q.h).length;
+      c.seqs = c.seqs.filter((q) => q.m === "cara"); c.samples = c.samples.filter((q) => !q.h);
+    }
+    s.fv = FV;
+    if (lost) setTimeout(() => toast("La app mejoró la detección de manos: volvé a grabar o importar las señas de manos"), 500);
+  }
+  return s;
+}
+function load() {
+  try { const s = JSON.parse(localStorage.getItem(STORE)); if (s && Array.isArray(s.classes)) return normalize(s); } catch (e) {}
+  return null;
+}
+let state = load() || defaultState();
+function save() {
+  try {
+    const str = JSON.stringify(state);
+    localStorage.setItem(STORE, str);
+    $("storageInfo").textContent = `Datos guardados: ${(str.length / 1024).toFixed(0)} KB`;
+  } catch (e) { toast("No hay más espacio en este navegador. Exportá una copia y borrá grabaciones que no uses."); }
+}
+let modelsDirty = true;
+function trained() { modelsDirty = true; save(); }
+
+// ---------- UI general ----------
+let tab = "hablar";
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
+  tab = b.dataset.tab;
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("on", x === b));
+  document.querySelectorAll("[data-panel]").forEach((p) => (p.hidden = p.dataset.panel !== tab));
+  $("camSection").hidden = !(tab === "hablar" || tab === "entrenar");
+  render();
+}));
+let toastT;
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toastT); toastT = setTimeout(() => (t.style.display = "none"), 3000);
+}
+function setStatus(s) { $("status").textContent = s; }
+
+// ---------- Voz ----------
+let voices = [];
+function loadVoices() {
+  voices = (window.speechSynthesis?.getVoices() || []).filter((v) => v.lang && v.lang.toLowerCase().startsWith("es"));
+  const sel = $("voiceSel"); sel.innerHTML = "";
+  const def = document.createElement("option"); def.value = ""; def.textContent = "Automática (español)"; sel.appendChild(def);
+  voices.forEach((v) => { const o = document.createElement("option"); o.value = v.voiceURI; o.textContent = `${v.name} (${v.lang})`; sel.appendChild(o); });
+  sel.value = state.settings.voice;
+}
+if ("speechSynthesis" in window) { loadVoices(); speechSynthesis.onvoiceschanged = loadVoices; }
+function pickVoice() {
+  return voices.find((v) => v.voiceURI === state.settings.voice)
+    || voices.find((v) => /es[-_]AR/i.test(v.lang)) || voices.find((v) => /es[-_](US|MX|419)/i.test(v.lang)) || voices[0] || null;
+}
+let curUtt = null, spokeOk = false;   // se guarda la referencia: Chrome a veces descarta la frase si no
+function speak(text) {
+  const ss = window.speechSynthesis;
+  if (!ss) { toast("Este navegador no tiene síntesis de voz"); return; }
+  try {
+    const u = new SpeechSynthesisUtterance(text.replace(/\s*\(\d\)$/, ""));
+    const v = pickVoice();
+    if (v) { u.voice = v; u.lang = v.lang; }
+    else if (ss.getVoices().length) u.lang = "es-AR";   // sin voz en español: usa la voz del sistema
+    u.rate = state.settings.rate; u.volume = 1;
+    u.onstart = () => { spokeOk = true; };
+    u.onerror = (e) => {
+      if (e.error === "interrupted" || e.error === "canceled") return;
+      toast(e.error === "not-allowed" ? "El navegador bloqueó la voz: tocá cualquier botón de la página y probá de nuevo"
+                                      : "No se pudo reproducir la voz (" + e.error + ")");
+    };
+    curUtt = u;
+    const go = () => { try { ss.resume(); ss.speak(u); } catch (e) {} };
+    // cancelar y hablar en el mismo instante deja mudo a Chrome: si hay algo sonando, se corta y se espera un momento
+    if (ss.speaking || ss.pending) { ss.cancel(); setTimeout(go, 120); } else go();
+  } catch (e) {}
+}
+let lastSaid = "";
+function say(text) {
+  lastSaid = text;
+  $("said").textContent = text;
+  const li = document.createElement("li");
+  li.textContent = `${new Date().toLocaleTimeString("es-AR", { hour: "2-digit", minute: "2-digit" })} — ${text}`;
+  $("history").prepend(li);
+  while ($("history").children.length > 30) $("history").lastChild.remove();
+  speak(text);
+}
+function fire(c) {
+  if (state.settings.auto) say(c.text);
+  else { lastSaid = c.text; $("said").textContent = c.text; }
+}
+$("repeatBtn").onclick = () => lastSaid && speak(lastSaid);
+$("testVoiceBtn").onclick = () => {
+  const all = window.speechSynthesis?.getVoices() || [];
+  $("voiceInfo").textContent = !window.speechSynthesis ? "Este navegador no tiene síntesis de voz."
+    : `Voces instaladas: ${all.length} (${voices.length} en español). Si no escuchás nada, revisá el volumen de la PC y que la pestaña no esté silenciada.`;
+  speak("Hola, así suena mi voz");
+};
+
+// ---------- Cámara y modelos ----------
+const video = $("video"), canvas = $("overlay"), ctx = canvas.getContext("2d");
+let stream = null, running = false, vision = null, handLm = null, faceLm = null, poseLm = null;
+
+async function makeTask(Cls, model, extra) {
+  for (const delegate of ["GPU", "CPU"]) {
+    try { return await Cls.createFromOptions(vision, { baseOptions: { modelAssetPath: model, delegate }, runningMode: "VIDEO", ...extra }); }
+    catch (e) { if (delegate === "CPU") throw e; }
+  }
+}
+async function ensureModels() {
+  const m = state.settings.mode;
+  if (!vision) { setStatus("Cargando motor…"); vision = await FilesetResolver.forVisionTasks(WASM); }
+  if (m !== "cara" && !handLm) {
+    setStatus("Cargando modelo de manos…");
+    handLm = await makeTask(HandLandmarker, HAND_MODEL, { numHands: 2, minHandDetectionConfidence: 0.5, minHandPresenceConfidence: 0.4, minTrackingConfidence: 0.4 });
+  }
+  if (m !== "cara" && !poseLm) {
+    setStatus("Cargando modelo del cuerpo…");
+    poseLm = await makeTask(PoseLandmarker, POSE_MODEL, { numPoses: 1 });
+  }
+  if (m !== "manos" && !faceLm) {
+    setStatus("Cargando modelo de cara…");
+    faceLm = await makeTask(FaceLandmarker, FACE_MODEL, { numFaces: 1, outputFaceBlendshapes: true });
+  }
+  setStatus("Listo");
+}
+async function startCam() {
+  if (!navigator.mediaDevices?.getUserMedia) { toast("La cámara necesita abrir la app por https (o localhost)."); return; }
+  try { speechSynthesis.speak(new SpeechSynthesisUtterance("")); } catch (e) {}
+  $("startBtn").disabled = true;
+  try {
+    if (stream) stream.getTracks().forEach((t) => t.stop());
+    stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: state.settings.facing, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    video.srcObject = stream;
+    await video.play();
+    $("camWrap").classList.toggle("mirror", state.settings.facing === "user");
+    await ensureModels();
+    $("camOverlay").style.display = "none";
+    if (!running) { running = true; requestAnimationFrame(loop); }
+  } catch (e) {
+    console.error(e); setStatus("Error");
+    const inFrame = window.top !== window.self;
+    let msg;
+    if (!window.isSecureContext) msg = "La cámara solo funciona si la app se abre desde una dirección https:// en Chrome.";
+    else if (e.name === "NotAllowedError") msg = inFrame
+      ? "Esta vista previa no permite usar la cámara. Abrí la app en Chrome desde su dirección https://."
+      : "Permiso de cámara denegado. En Chrome: tocá el ícono a la izquierda de la dirección → Permisos → Cámara → Permitir, y recargá.";
+    else if (e.name === "NotFoundError") msg = "No se encontró ninguna cámara.";
+    else if (e.name === "NotReadableError") msg = "Otra app está usando la cámara. Cerrala y probá de nuevo.";
+    else msg = "No se pudo iniciar: " + (e.message || e);
+    showCamHelp(msg);
+  } finally { $("startBtn").disabled = false; }
+}
+function showCamHelp(msg) {
+  let d = $("camHelp");
+  if (!d) { d = document.createElement("div"); d.id = "camHelp"; d.style.cssText = "max-width:90%;font-size:15px"; $("camOverlay").prepend(d); }
+  d.textContent = "⚠️ " + msg;
+  toast(msg);
+}
+$("startBtn").onclick = startCam;
+
+// ---------- Rasgos por cuadro ----------
+// Todo se mide en píxeles de la imagen original, así no importa si el video es vertical u horizontal.
+// La posición de la mano se mide respecto de los hombros (centro y ancho), así coincide
+// entre la cámara del celular y un video grabado con otro encuadre.
+function handVec(pts, mirror) {
+  const w = pts[0], m = pts[9], sx = mirror ? -1 : 1;
+  const s = Math.hypot(m.x - w.x, m.y - w.y, m.z - w.z) || 1e-6;
+  // se gira la mano para que la dirección muñeca→nudillo medio quede siempre hacia arriba:
+  // así la forma no depende de cuánto incline la mano cada persona (medido con videos reales, separa mejor las señas)
+  const ax = sx * (m.x - w.x), ay = m.y - w.y, n = Math.hypot(ax, ay) || 1e-6;
+  const ca = -ay / n, sa = -ax / n;      // rotación que lleva (ax, ay) a (0, -n)
+  const out = [];
+  for (const p of pts) {
+    const x = sx * (p.x - w.x) / s, y = (p.y - w.y) / s;
+    out.push(x * ca - y * sa, x * sa + y * ca, (p.z - w.z) / s);
+  }
+  return out;
+}
+// referencia corporal a partir de los hombros (landmarks 11 y 12 de la pose)
+function bodyRef(pr, W, H) {
+  const L = pr?.landmarks?.[0];
+  if (!L) return null;
+  const a = L[11], b = L[12];
+  if ((a.visibility ?? 1) < 0.3 || (b.visibility ?? 1) < 0.3) return null;
+  const s = Math.hypot((a.x - b.x) * W, (a.y - b.y) * H);
+  if (s < 10) return null;
+  return { cx: (a.x + b.x) / 2 * W, cy: (a.y + b.y) / 2 * H, s };
+}
+const fallbackRef = (W, H) => ({ cx: W / 2, cy: H * 0.8, s: Math.min(W, H) * 0.5 });
+// box: zona de la imagen donde se buscaron las manos/cara ({x0, y0, side} en píxeles) o null = imagen completa
+function extract(hr, fr, o) {
+  const { W, H, box = null, ref = fallbackRef(W, H), mirror = false } = o;
+  const toPx = (q) => box ? { x: box.x0 + q.x * box.side, y: box.y0 + q.y * box.side, z: q.z * box.side }
+                          : { x: q.x * W, y: q.y * H, z: q.z * W };
+  let h = null, f = null, p = null;
+  if (hr?.landmarks?.length) {
+    const slots = [null, null], pos = [0, 0, 0, 0], sx = mirror ? -1 : 1;
+    const hd = hr.handednesses || hr.handedness || [];
+    hr.landmarks.forEach((lms, i) => {
+      const pts = lms.map(toPx);
+      const px = sx * (pts[0].x - ref.cx) / ref.s * 0.5, py = (pts[0].y - ref.cy) / ref.s * 0.5;
+      const lab = hd[i]?.[0]?.categoryName;   // qué mano es, según el detector (estable aunque cruce el cuerpo)
+      let idx = lab ? ((lab === "Left") !== mirror ? 0 : 1) : (px < 0 ? 0 : 1);
+      if (slots[idx]) idx = 1 - idx;
+      slots[idx] = handVec(pts, mirror);
+      pos[idx * 2] = px; pos[idx * 2 + 1] = py;
+    });
+    h = [...(slots[0] || ZERO63), ...(slots[1] || ZERO63)];
+    p = pos;
+  }
+  if (fr?.faceBlendshapes?.length) f = fr.faceBlendshapes[0].categories.slice(1, 52).map((c) => c.score);
+  return { h, f, p, n: hr?.landmarks?.length || 0 };
+}
+// vector para señas quietas
+function staticVec(h, f, mode) {
+  if (mode === "manos") return h || null;
+  if (mode === "cara") return f ? Array.from(f, (v) => v * FACE_W) : null;
+  if (!h && !f) return null;
+  return [...(h || ZERO63.concat(ZERO63)), ...Array.from(f || ZERO51, (v) => v * FACE_W)];
+}
+const hasPart = (s, mode) => mode === "manos" ? !!s.h : mode === "cara" ? !!s.f : !!(s.h || s.f);
+// vector para cada cuadro de una seña con movimiento: forma (x,y) + posición de la muñeca, y/o cara
+function frameVec(feat, mode) {
+  const useH = mode !== "cara", useF = mode !== "manos";
+  if (mode === "manos" && !feat.h) return null;
+  if (mode === "cara" && !feat.f) return null;
+  if (!feat.h && !feat.f) return null;
+  const out = [];
+  if (useH) {
+    if (feat.h) { for (let i = 0; i < feat.h.length; i += 3) out.push(feat.h[i], feat.h[i + 1]); for (const x of feat.p) out.push(x * POS_W); }
+    else for (let i = 0; i < 88; i++) out.push(0);
+  }
+  if (useF) for (const x of (feat.f || ZERO51)) out.push(x * FACE_W);
+  return out;
+}
+
+// ---------- Herramientas de secuencias ----------
+function fd(a, b) { let d = 0; for (let k = 0; k < a.length; k++) { const e = a[k] - b[k]; d += e * e; } return Math.sqrt(d); }
+function resample(fr, n) {
+  const out = [], m = fr.length;
+  for (let i = 0; i < n; i++) {
+    const t = (m - 1) * i / (n - 1), a = Math.floor(t), b = Math.min(m - 1, a + 1), w = t - a;
+    const fa = fr[a], fb = fr[b], v = new Float32Array(fa.length);
+    for (let k = 0; k < fa.length; k++) v[k] = fa[k] * (1 - w) + fb[k] * w;
+    out.push(v);
+  }
+  return out;
+}
+function motion(F) { let s = 0; for (let i = 1; i < F.length; i++) s += fd(F[i], F[i - 1]); return s / (F.length - 1); }
+// distancia entre un cuadro en vivo (q) y uno aprendido (m): si la seña aprendida no usa una mano,
+// se ignora lo que haga esa mano en vivo (por ejemplo, la mano que sostiene el celular o descansa)
+function fdm(q, m) {
+  let d = 0, k0 = 0;
+  if (state.settings.mode !== "cara" && q.length >= 88) {
+    for (let h = 0; h < 2; h++) {
+      const sh = h * 42, ps = 84 + h * 2;
+      if (m[ps] === 0 && m[ps + 1] === 0) continue;
+      for (let k = sh; k < sh + 42; k++) { const e = q[k] - m[k]; d += e * e; }
+      for (let k = ps; k < ps + 2; k++) { const e = q[k] - m[k]; d += e * e; }
+    }
+    k0 = 88;
+  }
+  for (let k = k0; k < q.length; k++) { const e = q[k] - m[k]; d += e * e; }
+  return Math.sqrt(d);
+}
+function dtw(A, B, band = 3, dist = fd) {
+  const n = A.length, INF = 1e18;
+  let prev = new Float64Array(n + 1).fill(INF), cur = new Float64Array(n + 1);
+  prev[0] = 0;
+  for (let i = 1; i <= n; i++) {
+    cur.fill(INF);
+    for (let j = Math.max(1, i - band); j <= Math.min(n, i + band); j++) {
+      cur[j] = dist(A[i - 1], B[j - 1]) + Math.min(prev[j], cur[j - 1], prev[j - 1]);
+    }
+    [prev, cur] = [cur, prev];
+  }
+  return prev[n] / n;
+}
+// recorta los momentos quietos del principio y del final de una grabación
+function trimStill(fr, mode) {
+  if (fr.length < 6) return fr;
+  const m = [0];
+  for (let i = 1; i < fr.length; i++) m.push(segDist(fr[i].v, fr[i - 1].v, mode));
+  const thr = Math.max(...m) * 0.2;
+  let a = m.findIndex((x) => x > thr), b = m.length - 1 - [...m].reverse().findIndex((x) => x > thr);
+  a = Math.max(0, a - 1); b = Math.min(fr.length - 1, b + 1);
+  return b - a + 1 >= 6 ? fr.slice(a, b + 1) : fr;
+}
+
+// ---------- Modelos entrenados (cache) ----------
+const decCache = new WeakMap();
+function sampleVec(s, mode) {
+  let c = decCache.get(s); if (!c) { c = {}; decCache.set(s, c); }
+  if (!(mode in c)) c[mode] = staticVec(dec(s.h, SH), dec(s.f, SF), mode);
+  return c[mode];
+}
+function seqFrames(s) {
+  let c = decCache.get(s);
+  if (!c) {
+    const flat = dec(s.v, SH), dim = flat.length / L, F = [];
+    for (let i = 0; i < L; i++) F.push(flat.subarray(i * dim, (i + 1) * dim));
+    c = F; decCache.set(s, c);
+  }
+  return c;
+}
+let movModels = [];
+function buildModels() {
+  modelsDirty = false;
+  const mode = state.settings.mode;
+  movModels = [];
+  const mean = (a) => a.reduce((x, y) => x + y, 0) / a.length;
+  for (const c of state.classes) {
+    if (c.kind !== "mov") continue;
+    const seqs = c.seqs.filter((s) => s.m === mode).slice(-MAX_SEQS);
+    if (!seqs.length) continue;
+    const F = seqs.map(seqFrames);
+    let thr = null;
+    if (F.length >= 2) thr = mean(F.map((a, i) => Math.min(...F.filter((_, j) => j !== i).map((b) => dtw(a, b))))) * 2;
+    movModels.push({ c, F, thr, dur: mean(seqs.map((s) => s.d)), mot: mean(seqs.map((s) => s.mo)) });
+  }
+  // Umbral de cada seña: según qué tan distintas son sus grabaciones entre sí y qué tan cerca está la seña más parecida.
+  // Con una sola seña cargada se usa un valor fijo, medido con videos reales.
+  for (const M of movModels) {
+    let near = Infinity;
+    for (const O of movModels) if (O !== M) for (const a of M.F) for (const b of O.F) near = Math.min(near, dtw(a, b));
+    const base = M.thr != null ? Math.max(M.thr, 0.6) : 0.9;
+    M.thr = isFinite(near) ? Math.min(base, Math.max(near * 0.6, 0.35)) : base;
+  }
+}
+const countFor = (c) => c.kind === "mov" ? c.seqs.filter((s) => s.m === state.settings.mode).length : c.samples.filter((s) => hasPart(s, state.settings.mode)).length;
+
+// ---------- Clasificador de señas quietas (k vecinos) ----------
+function classifyStatic(feat) {
+  const mode = state.settings.mode;
+  const q = staticVec(feat.h, feat.f, mode);
+  if (!q) return null;
+  const cands = [];
+  for (const c of state.classes) {
+    if (c.kind !== "quieta") continue;
+    for (const s of c.samples) {
+      if (!hasPart(s, mode)) continue;
+      const v = sampleVec(s, mode);
+      if (!v || v.length !== q.length) continue;
+      let d = 0; for (let i = 0; i < q.length; i++) { const e = q[i] - v[i]; d += e * e; }
+      cands.push([d, c]);
+    }
+  }
+  if (!cands.length) return null;
+  cands.sort((a, b) => a[0] - b[0]);
+  const k = Math.min(K, cands.length), votes = new Map();
+  let total = 0;
+  for (let i = 0; i < k; i++) { const w = 1 / (1e-3 + Math.sqrt(cands[i][0])); votes.set(cands[i][1], (votes.get(cands[i][1]) || 0) + w); total += w; }
+  let best = null, bv = -1;
+  for (const [c, v] of votes) if (v > bv) { bv = v; best = c; }
+  return { c: best, conf: bv / total };
+}
+
+// ---------- Bucle principal ----------
+let lastVT = -1, frameN = 0;
+let cur = null, curSince = 0, armed = true, restSince = 0, smooth = [];
+let buf = [], coolUntil = 0;
+// segmentación: una seña = movimiento que arranca desde quieto y termina quieto
+let prevV = null, eHist = [], stillCount = 0, movArmed = true, lastMoveT = 0;
+let wasHeld = false;
+let poseN = 0, liveRef = null, liveCv = null, liveG = null, lastHand = null;
+function loop() {
+  if (!running) return;
+  if (!importing && video.readyState >= 2 && video.currentTime !== lastVT) {
+    lastVT = video.currentTime;
+    const ts = performance.now(), m = state.settings.mode;
+    const W = video.videoWidth, H = video.videoHeight;
+    let hr = null, fr = null, box = null;
+    try {
+      // si la persona está lejos, las manos se buscan en un recorte alrededor del cuerpo (se ven más grandes)
+      if (liveRef && liveRef.s * 2.6 < Math.min(W, H) * 0.9) {
+        box = { x0: liveRef.cx - liveRef.s * 1.3, y0: liveRef.cy - liveRef.s * 1.1, side: liveRef.s * 2.6 };
+        if (!liveCv) { liveCv = document.createElement("canvas"); liveCv.width = liveCv.height = 512; liveG = liveCv.getContext("2d"); }
+        liveG.fillStyle = "#000"; liveG.fillRect(0, 0, 512, 512);
+        liveG.drawImage(video, box.x0, box.y0, box.side, box.side, 0, 0, 512, 512);
+      }
+      if (m !== "cara" && handLm) hr = handLm.detectForVideo(box ? liveCv : video, ts);
+      if (m !== "manos" && faceLm) fr = faceLm.detectForVideo(video, ts);
+    } catch (e) { console.warn(e); }
+    if (m !== "cara" && poseLm && (++poseN % 3 === 0 || !liveRef)) {
+      try {
+        const r = bodyRef(poseLm.detectForVideo(video, ts + 0.5), W, H);
+        if (r) liveRef = liveRef ? { cx: liveRef.cx * 0.6 + r.cx * 0.4, cy: liveRef.cy * 0.6 + r.cy * 0.4, s: liveRef.s * 0.6 + r.s * 0.4 } : r;
+      } catch (e) {}
+    }
+    draw(hr, fr, box);
+    // la cara se analiza siempre en la imagen completa; el recorte solo aplica a las manos
+    onFrame(extract(hr, fr, { W, H, box, ref: liveRef || fallbackRef(W, H) }), ts);
+  }
+  requestAnimationFrame(loop);
+}
+
+function onFrame(feat, now) {
+  // si la mano se pierde un instante (por ejemplo al pasar delante de la cara), se mantiene la última posición
+  if (state.settings.mode !== "cara") {
+    if (feat.h) lastHand = { h: feat.h, p: feat.p, t: now };
+    else if (lastHand && now - lastHand.t < 450) { feat.h = lastHand.h; feat.p = lastHand.p; feat.held = true; }
+  }
+  if (state.settings.mode !== "cara") setStatus(`Manos: ${feat.n}${feat.held ? " (perdida un instante)" : ""}${liveRef ? "" : " · cuerpo no detectado"}`);
+  if (rec) { recFrame(feat, now); return; }
+  if (modelsDirty) buildModels();
+  const mode = state.settings.mode;
+  const v = frameVec(feat, mode);
+  buf.push({ t: now, v });
+  while (buf.length && now - buf[0].t > 4000) buf.shift();
+  if (feat.held) return;   // mano perdida un instante: se espera a que reaparezca
+  if (++frameN % 2 === 0) movStep(now);
+  if (now < coolUntil) return;
+  staticStep(feat, now);
+}
+
+function staticStep(feat, now) {
+  const r = classifyStatic(feat);
+  smooth.push(r && r.conf >= state.settings.minConf ? r.c : null);
+  if (smooth.length > 5) smooth.shift();
+  const counts = new Map();
+  smooth.forEach((x) => counts.set(x, (counts.get(x) || 0) + 1));
+  let c = null, n = 0;
+  for (const [k, v] of counts) if (v > n) { n = v; c = k; }
+
+  $("liveLabel").textContent = "Quieta: " + (c ? c.text : r ? "¿…?" : "—");
+  $("liveBar").style.width = Math.round((r?.conf || 0) * 100) + "%";
+
+  if (c !== cur) { cur = c; curSince = now; }
+  if (!c || c.id === REST) {
+    if (!restSince) restSince = now;
+    if (now - restSince > 350) armed = true;   // hay que volver a reposo para repetir
+    return;
+  }
+  restSince = 0;
+  if (armed && now - curSince >= state.settings.holdMs && tab === "hablar") { armed = false; fire(c); }
+}
+
+// para detectar inicio/fin de una seña: pesa más el desplazamiento de la mano que el temblor de los dedos
+function segDist(a, b, mode) {
+  let d = 0, k0 = 0;
+  if (mode !== "cara") {
+    // por cada mano: solo si aparece en los dos cuadros (que una mano aparezca o desaparezca no cuenta como movimiento)
+    for (let h = 0; h < 2; h++) {
+      const sh = h * 42, ps = 84 + h * 2;
+      const has = (v) => v[ps] !== 0 || v[ps + 1] !== 0;
+      if (!has(a) || !has(b)) continue;
+      for (let k = sh; k < sh + 42; k++) { const e = a[k] - b[k]; d += 0.05 * e * e; }
+      for (let k = ps; k < ps + 2; k++) { const e = a[k] - b[k]; d += e * e; }
+    }
+    k0 = 88;
+  }
+  for (let k = k0; k < a.length; k++) { const e = a[k] - b[k]; d += e * e; }
+  return Math.sqrt(d);
+}
+
+// Señas con movimiento: se compara continuamente lo último que hizo la persona con cada seña aprendida.
+// Dispara cuando una seña coincide de forma sostenida, y no la repite hasta que la mano cambie o se vaya.
+let movHit = null, movBlocked = null, movRelease = 0;
+let otherHandN = 0;
+// Diagnóstico: en qué se diferencia el cuadro actual de la seña más parecida (forma de la mano vs. lugar donde está)
+function diag(best, bestS) {
+  const el = $("liveDiag");
+  const q = buf.length ? buf[buf.length - 1].v : null;
+  const M = best && movModels.find((m) => m.c === best);
+  if (!M || !q || q.length < 88 || state.settings.mode === "cara") { el.textContent = ""; return; }
+  const part = (qq) => {
+    let bs = Infinity, bp = Infinity, bt = Infinity;
+    for (const F of M.F) for (const m of F) {
+      let ds = 0, dp = 0;
+      for (let h = 0; h < 2; h++) {
+        const sh = h * 42, ps = 84 + h * 2;
+        if (m[ps] === 0 && m[ps + 1] === 0) continue;
+        for (let k = sh; k < sh + 42; k++) { const e = qq[k] - m[k]; ds += e * e; }
+        for (let k = ps; k < ps + 2; k++) { const e = qq[k] - m[k]; dp += e * e; }
+      }
+      if (ds + dp < bt) { bt = ds + dp; bs = Math.sqrt(ds); bp = Math.sqrt(dp); }
+    }
+    return { bs, bp, bt: Math.sqrt(bt) };
+  };
+  const a = part(q);
+  // la misma pose hecha con la otra mano (espejada)
+  const sw = new Float32Array(q.length);
+  for (let k = 0; k < 42; k += 2) { sw[k] = -q[42 + k]; sw[k + 1] = q[43 + k]; sw[42 + k] = -q[k]; sw[43 + k] = q[k + 1]; }
+  sw[84] = -q[86]; sw[85] = q[87]; sw[86] = -q[84]; sw[87] = q[85];
+  const b = part(sw);
+  let t = `Diferencia con ${best.text}: forma ${a.bs.toFixed(2)} · lugar ${a.bp.toFixed(2)} · límite ${(M.thr * state.settings.movTol).toFixed(2)}${liveRef ? "" : " · hombros no detectados"}`;
+  otherHandN = b.bt < a.bt * 0.6 ? otherHandN + 1 : 0;
+  if (otherHandN >= 12) t += " · 👉 parece hecha con la otra mano: probá con la otra mano";   // solo si se sostiene
+  el.textContent = t;
+}
+function movStep(now) {
+  if (!movModels.length) { $("liveMov").textContent = "Movimiento: —"; $("liveMovBar").style.width = "0"; return; }
+  const tol = state.settings.movTol;
+  let best = null, bestS = Infinity, second = Infinity;
+  for (const M of movModels) {
+    let dmin = Infinity;
+    for (const sc of [0.8, 1, 1.25]) {
+      const w = buf.filter((f) => f.t >= now - M.dur * sc);
+      const vs = w.filter((f) => f.v).map((f) => f.v);
+      if (vs.length < 4 || vs.length < w.length * 0.7) continue;
+      if (vs[0].length !== M.F[0][0].length) continue;
+      const R = resample(vs, L);
+      for (const F of M.F) dmin = Math.min(dmin, dtw(R, F, 3, fdm));
+    }
+    const s = dmin / (M.thr * tol);
+    if (s < bestS) { second = bestS; bestS = s; best = M.c; } else if (s < second) second = s;
+  }
+  const ok = best && bestS < 1 && bestS < second * 0.85;
+  diag(best, bestS);
+  $("liveMov").textContent = "Movimiento: " + (best && isFinite(bestS) ? `${best.text} · parecido ${Math.round(Math.min(1, 1 / bestS) * 100)}%${ok ? " ✓" : bestS >= 1 ? " (falta para hablar)" : " (dudoso)"}` : "—");
+  $("liveMovBar").style.width = (isFinite(bestS) ? Math.round(Math.min(1, 1 / bestS) * 100) : 0) + "%";
+  if (ok && best === movBlocked) { movRelease = 0; movHit = null; return; }   // sigue sosteniendo la misma seña
+  if (movBlocked) {
+    if (!movRelease) movRelease = now;
+    if (now - movRelease > 400 || ok) { movBlocked = null; movRelease = 0; }
+  }
+  if (!ok) { movHit = null; return; }
+  movHit = movHit && movHit.c === best ? { c: best, n: movHit.n + 1 } : { c: best, n: 1 };
+  if (movHit.n >= 2 && tab === "hablar") {
+    fire(best);
+    movBlocked = best; movRelease = 0; movHit = null;
+    coolUntil = now + 500; smooth = []; armed = false; cur = null;
+  }
+}
+
+// ---------- Dibujo ----------
+function draw(hr, fr, box) {
+  if (canvas.width !== video.videoWidth) { canvas.width = video.videoWidth; canvas.height = video.videoHeight; }
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.lineWidth = 3;
+  if (hr?.landmarks) for (const raw of hr.landmarks) {
+    const lms = box ? raw.map((q) => ({ x: (box.x0 + q.x * box.side) / W, y: (box.y0 + q.y * box.side) / H })) : raw;
+    ctx.strokeStyle = "#2dd4bf";
+    for (const c of HandLandmarker.HAND_CONNECTIONS || []) {
+      const a = lms[c.start], b = lms[c.end];
+      ctx.beginPath(); ctx.moveTo(a.x * W, a.y * H); ctx.lineTo(b.x * W, b.y * H); ctx.stroke();
+    }
+    ctx.fillStyle = "#fff";
+    for (const p of lms) { ctx.beginPath(); ctx.arc(p.x * W, p.y * H, 4, 0, 7); ctx.fill(); }
+  }
+  if (fr?.faceLandmarks?.length) {
+    const lms = fr.faceLandmarks[0];
+    ctx.strokeStyle = "#fbbf24";
+    const groups = [FaceLandmarker.FACE_LANDMARKS_LIPS, FaceLandmarker.FACE_LANDMARKS_LEFT_EYE, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYE,
+      FaceLandmarker.FACE_LANDMARKS_LEFT_EYEBROW, FaceLandmarker.FACE_LANDMARKS_RIGHT_EYEBROW];
+    for (const g of groups) for (const c of g || []) {
+      const a = lms[c.start], b = lms[c.end];
+      ctx.beginPath(); ctx.moveTo(a.x * W, a.y * H); ctx.lineTo(b.x * W, b.y * H); ctx.stroke();
+    }
+  }
+}
+
+// ---------- Grabación ----------
+// ---------- Entrenar desde archivos de video ----------
+let importing = false;
+const norm = (s) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/\.[a-z0-9]+$/, "")
+  .replace(/[_\-.]+/g, " ").replace(/\s*\(\d\)$/, "").replace(/\s+\d+$/, "").replace(/\s+/g, " ").trim();
+// Guantes de colores (como en LSA64): el detector de manos no los reconoce, así que
+// se repintan los colores muy vivos con un tono de piel antes de analizar el cuadro.
+function deglove(g, n) {
+  const im = g.getImageData(0, 0, n, n), d = im.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const r = d[i], G = d[i + 1], b = d[i + 2], mx = Math.max(r, G, b), mn = Math.min(r, G, b);
+    if (mx < 60 || mx - mn < 0.45 * mx) continue;
+    let h = mx === r ? ((G - b) / (mx - mn)) % 6 : mx === G ? (b - r) / (mx - mn) + 2 : (r - G) / (mx - mn) + 4;
+    h *= 60; if (h < 0) h += 360;
+    if (h >= 5 && h <= 45) continue;          // ya es tono piel
+    const l = (0.3 * r + 0.59 * G + 0.11 * b) * 1.25 + 25;
+    d[i] = Math.min(255, l * 1.12); d[i + 1] = Math.min(255, l * 0.86); d[i + 2] = Math.min(255, l * 0.72);
+  }
+  g.putImageData(im, 0, 0);
+}
+async function videoToSeq(file, mode, mirror, onProg, glove = false) {
+  const v = document.createElement("video");
+  v.muted = true; v.playsInline = true; v.preload = "auto";
+  const url = URL.createObjectURL(file);
+  v.src = url;
+  const seek = (t) => new Promise((ok) => { v.onseeked = ok; v.currentTime = t; });
+  try {
+    await new Promise((ok, bad) => { v.onloadeddata = ok; v.onerror = () => bad(new Error("formato de video no soportado")); });
+    const W = v.videoWidth, H = v.videoHeight, dur = v.duration;
+    // 1) ubicar a la persona con el modelo de cuerpo (en varios cuadros) y fijar un recorte alrededor
+    let ref = null;
+    if (poseLm) {
+      const refs = [];
+      for (let i = 0; i < 6; i++) {
+        await seek(dur * (i + 0.5) / 6);
+        const r = bodyRef(poseLm.detectForVideo(v, performance.now()), W, H);
+        if (r) refs.push(r);
+      }
+      if (refs.length) {
+        const med = (k) => refs.map((r) => r[k]).sort((a, b) => a - b)[Math.floor(refs.length / 2)];
+        ref = { cx: med("cx"), cy: med("cy"), s: med("s") };
+      }
+    }
+    let box;
+    if (ref) box = { x0: ref.cx - ref.s * 1.3, y0: ref.cy - ref.s * 1.1, side: ref.s * 2.6 };
+    else { const side = Math.min(W, H); box = { x0: (W - side) / 2, y0: (H - side) / 2, side }; ref = { cx: W / 2, cy: H * 0.55, s: side * 0.35 }; }
+    const cv = document.createElement("canvas"); cv.width = cv.height = 640;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    // 2) recorrer el video analizando solo el recorte (manos y cara más grandes)
+    const step = Math.min(1 / 15, dur / 24), frames = [];   // videos muy cortos: más cuadros
+    for (let t = 0.02; t < dur; t += step) {
+      await seek(t);
+      g.fillStyle = "#000"; g.fillRect(0, 0, 640, 640);
+      g.drawImage(v, box.x0, box.y0, box.side, box.side, 0, 0, 640, 640);
+      if (glove) deglove(g, 640);
+      const ts = performance.now();
+      const hr = mode !== "cara" && handLm ? handLm.detectForVideo(cv, ts) : null;
+      const fr = mode !== "manos" && faceLm ? faceLm.detectForVideo(cv, ts + 0.5) : null;
+      const fv = frameVec(extract(hr, fr, { W, H, box, ref, mirror }), mode);
+      if (fv) frames.push({ t: t * 1000, v: fv });
+      onProg?.(t / dur);
+    }
+    const fr = trimStill(frames, mode);
+    if (fr.length < 6) throw new Error("no se detectaron " + (mode === "cara" ? "la cara" : "las manos") + ` (${frames.length} cuadros con detección)`);
+    const R = resample(fr.map((f) => f.v), L);
+    const flat = new Float32Array(R.length * R[0].length);
+    R.forEach((x, i) => flat.set(x, i * x.length));
+    return { m: mode, d: Math.min(4000, Math.max(400, fr[fr.length - 1].t - fr[0].t)), mo: motion(R), v: enc(flat, SH), src: "video" };
+  } finally { URL.revokeObjectURL(url); }
+}
+// Señas del dataset LSA64 (Ronchetti et al., UNLP), en el orden de sus IDs 001–064
+const LSA64 = ["Opaco","Rojo","Verde","Amarillo","Brillante","Celeste","Colores","Rosa","Mujer","Enemigo","Hijo","Hombre","Lejos","Cajón","Nacer","Aprender","Llamar","Espumadera","Amargo","Dulce de leche","Leche","Agua","Comida","Argentina","Uruguay","País","Apellido","Dónde","Burlarse","Cumpleaños","Desayuno","Foto","Hambre","Mapa","Moneda","Música","Barco","Ninguno","Nombre","Paciencia","Perfume","Sordo","Trampa","Arroz","Asado","Caramelo","Chicle","Fideos","Yogur","Aceptar","Gracias","Apagar","Aparecer","Aterrizar","Atrapar","Ayudar","Bailar","Bañarse","Comprar","Copiar","Correr","Darse cuenta","Dar","Encontrar"];
+const VIDEO_EXT = /\.(mp4|m4v|webm|mov|mkv|3gp|avi)$/i;
+async function importVideos(files, target) {
+  const skipped = files.filter((f) => !(f.type?.startsWith("video/") || VIDEO_EXT.test(f.name)));
+  files = files.filter((f) => !skipped.includes(f));
+  if (skipped.length) toast(`Se ignoraron ${skipped.length} archivo(s) que no son video`);
+  if (!files.length) return;
+  const mode = state.settings.mode, mirror = $("vidMirror").checked;
+  const box = $("vidLog"); box.innerHTML = ""; box.hidden = false; box.closest("details").open = true;
+  const log = (t) => { const d = document.createElement("div"); d.textContent = t; box.appendChild(d); return d; };
+  importing = true;
+  try {
+    setStatus("Cargando modelos…"); await ensureModels();
+    let ok = 0;
+    // archivos del dataset LSA64 (seña_persona_repetición.mp4): primero una repetición de cada persona
+    const m64 = (f) => { const m = /(?:^|[^0-9])(\d{3})_(\d{3})_(\d{3})\.[^.]+$/.exec(f.name); return m && +m[1] >= 1 && +m[1] <= 64 ? m : null; };
+    if (!target) files.sort((a, b) => {
+      const x = m64(a), y = m64(b);
+      if (!x || !y) return 0;
+      return (+x[3] - +y[3]) || (+x[2] - +y[2]) || (+x[1] - +y[1]);
+    });
+    let full = 0;
+    for (const file of files) {
+      let c = target;
+      if (!c) {
+        const m = m64(file);
+        const name = m ? LSA64[+m[1] - 1] : file.name.replace(/\.[^.]+$/, "").replace(/[_]+/g, " ").trim();
+        const key = norm(m ? name : file.name);
+        c = state.classes.find((x) => x.id !== REST && norm(x.text) === key);
+        if (!c) {
+          c = mkClass(name.charAt(0).toUpperCase() + name.slice(1), "mov"); state.classes.push(c);
+          if (m) c.pack = "LSA64 · UNLP";
+        }
+        if (m && c.seqs.filter((q) => q.m === mode && q.src === "video").length >= MAX_SEQS) { full++; continue; }
+      }
+      const line = log(`⏳ ${file.name} → ${c.text}`);
+      try {
+        const prog = (p) => (line.textContent = `⏳ ${file.name} → ${c.text} (${Math.round(p * 100)}%)`);
+        let seq, glove = !!m64(file) && mode !== "cara";
+        try { seq = await videoToSeq(file, mode, mirror, prog, glove); }
+        catch (e) {
+          if (glove || mode === "cara" || !/no se detectaron/.test(e.message || "")) throw e;
+          seq = await videoToSeq(file, mode, mirror, prog, true);   // segundo intento: por si usa guantes de colores
+        }
+        c.kind = "mov"; c.seqs.push(seq);
+        const mine = c.seqs.filter((s) => s.m === mode);
+        if (mine.length > MAX_SEQS) c.seqs.splice(c.seqs.indexOf(mine[0]), 1);
+        line.textContent = `✅ ${file.name} → ${c.text}`; ok++;
+      } catch (e) { line.textContent = `⚠️ ${file.name}: ${e.message || e}`; }
+    }
+    trained(); render();
+    if (full) log(`ℹ️ ${full} videos omitidos: esas señas ya tienen ${MAX_SEQS} ejemplos`);
+    toast(`${ok} de ${files.length - full} videos procesados`);
+  } catch (e) { toast("Error: " + (e.message || e)); }
+  finally { importing = false; buf = []; setStatus(running ? "Listo" : "Cámara apagada"); }
+}
+$("vidFiles").onchange = (e) => { importVideos([...e.target.files], null); e.target.value = ""; };
+$("vidDir").onchange = (e) => { importVideos([...e.target.files], null); e.target.value = ""; };
+let vidTarget = null;
+$("vidOne").onchange = (e) => { const f = [...e.target.files]; e.target.value = ""; importVideos(f, vidTarget); };
+
+let rec = null;
+async function record(c) {
+  if (!running) { toast("Primero activá la cámara"); window.scrollTo({ top: 0, behavior: "smooth" }); return; }
+  if (rec) return;
+  const mov = c.kind === "mov";
+  const cd = $("countdown");
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  cd.style.display = "flex";
+  const tip = mov ? "Empezá quieto, hacé la seña UNA vez y quedate quieto" : "Sostené la postura moviéndola apenas";
+  for (const n of [3, 2, 1]) { cd.innerHTML = ""; cd.append(String(n)); const s = document.createElement("small"); s.textContent = tip; cd.append(s); await new Promise((r) => setTimeout(r, 800)); }
+  cd.style.display = "none";
+  $("recBadge").style.display = "block";
+  const start = performance.now();
+  rec = { c, mov, start, until: start + (mov ? REC_MOV_MS : REC_STATIC_MS), count: 0, mode: state.settings.mode, frames: [] };
+}
+function recFrame(feat, now) {
+  const { c, mov, mode } = rec;
+  $("recBar").style.width = Math.min(100, (now - rec.start) / (rec.until - rec.start) * 100) + "%";
+  if (mov) {
+    const v = frameVec(feat, mode);
+    if (v) rec.frames.push({ t: now, v });
+  } else if (hasPart(feat, mode)) {
+    c.samples.push({ h: enc(feat.h, SH), f: enc(feat.f, SF) });
+    rec.count++;
+  }
+  $("liveLabel").textContent = `Grabando: ${c.text}`;
+  if (now < rec.until) return;
+
+  let msg;
+  if (mov) {
+    const fr = trimStill(rec.frames, mode);
+    if (fr.length < 6) msg = "No se detectó la seña: revisá luz y encuadre";
+    else {
+      const R = resample(fr.map((f) => f.v), L);
+      const flat = new Float32Array(R.length * R[0].length);
+      R.forEach((v, i) => flat.set(v, i * v.length));
+      c.seqs.push({ m: mode, d: Math.max(400, fr[fr.length - 1].t - fr[0].t), mo: motion(R), v: enc(flat, SH) });
+      const mine = c.seqs.filter((s) => s.m === mode);
+      if (mine.length > MAX_SEQS) c.seqs.splice(c.seqs.indexOf(mine[0]), 1);
+      const n = c.seqs.filter((s) => s.m === mode).length;
+      msg = n < 3 ? `Grabación ${n} lista. Repetila ${3 - n} vez/veces más` : `Grabación ${n} lista ✓`;
+    }
+  } else {
+    const mine = c.samples.filter((s) => hasPart(s, mode));
+    if (mine.length > MAX_STATIC) { const drop = new Set(mine.slice(0, mine.length - MAX_STATIC)); c.samples = c.samples.filter((s) => !drop.has(s)); }
+    msg = rec.count ? `${rec.count} muestras guardadas` : "No se detectó nada: revisá luz y encuadre";
+  }
+  $("recBadge").style.display = "none"; $("recBar").style.width = "0";
+  rec = null; buf = []; smooth = [];
+  trained(); render(); toast(msg);
+}
+
+// ---------- Listas ----------
+const LIST_LIMIT = 60;
+function render() {
+  const mode = state.settings.mode;
+  const q = $("filterTxt").value.trim().toLowerCase(), f = $("filterSel").value;
+  const list = $("classList"); list.innerHTML = "";
+  const shown = state.classes.filter((c) => {
+    if (q && !c.text.toLowerCase().includes(q)) return false;
+    const n = countFor(c);
+    if (f === "todo" && n > 0) return false;
+    if (f === "done" && n === 0) return false;
+    return true;
+  });
+  for (const c of shown.slice(0, LIST_LIMIT)) list.appendChild(classRow(c));
+  $("listMore").textContent = shown.length > LIST_LIMIT ? `Mostrando ${LIST_LIMIT} de ${shown.length}. Usá el buscador.` : "";
+  $("emptyHint").hidden = state.classes.some((c) => c.id !== REST && countFor(c) > 0);
+  renderPacks(); renderPhrases();
+}
+function classRow(c) {
+  const n = countFor(c), mov = c.kind === "mov";
+  const row = document.createElement("div"); row.className = "cls";
+  const top = document.createElement("div"); top.className = "top";
+  if (c.id === REST) { const t = document.createElement("strong"); t.textContent = "😐 " + c.text; top.appendChild(t); }
+  else {
+    const inp = document.createElement("input"); inp.type = "text"; inp.value = c.text; inp.maxLength = 120;
+    inp.onchange = () => { c.text = inp.value.trim() || c.text; save(); renderPhrases(); };
+    top.appendChild(inp);
+  }
+  row.appendChild(top);
+
+  const meta = document.createElement("div"); meta.className = "meta";
+  if (c.id !== REST) {
+    const sel = document.createElement("select");
+    sel.innerHTML = '<option value="quieta">✋ Quieta</option><option value="mov">🎬 Con movimiento</option>';
+    sel.value = c.kind;
+    sel.onchange = () => { c.kind = sel.value; trained(); render(); };
+    meta.appendChild(sel);
+  }
+  const ok = mov ? n >= 3 : n >= 60;
+  const pill = document.createElement("span");
+  pill.className = "pill " + (ok ? "ok" : n > 0 ? "low" : "none");
+  const nv = mov ? c.seqs.filter((s) => s.m === state.settings.mode && s.src === "video").length : 0;
+  pill.textContent = mov ? (n ? `${n - nv} propia${n - nv === 1 ? "" : "s"}${nv ? ` + ${nv} video` : ""}${n < 3 ? " · grabá más" : ""}` : "sin entrenar")
+                         : (n ? `${n} muestras${ok ? "" : " · grabá más"}` : "sin entrenar");
+  meta.appendChild(pill);
+  if (c.pack) { const s = document.createElement("span"); s.className = "pill src"; s.textContent = c.pack; meta.appendChild(s); }
+  row.appendChild(meta);
+
+  const acts = document.createElement("div"); acts.className = "acts";
+  const recB = document.createElement("button"); recB.className = "btn sm " + (mov ? "mov" : ""); recB.textContent = "⏺ Grabar"; recB.onclick = () => record(c);
+  acts.append(recB);
+  if (c.id !== REST) {
+    const vb = document.createElement("button"); vb.className = "btn sm sec"; vb.textContent = "🎞 Desde video";
+    vb.onclick = () => { vidTarget = c; $("vidOne").click(); };
+    acts.append(vb);
+  }
+  if (c.video) { const a = document.createElement("a"); a.className = "btn sm sec"; a.href = c.video; a.target = "_blank"; a.rel = "noopener"; a.textContent = "▶ Video"; acts.append(a); }
+  if (c.id !== REST) { const t = document.createElement("button"); t.className = "btn sm sec"; t.textContent = "🔊"; t.onclick = () => speak(c.text); acts.append(t); }
+  const clr = document.createElement("button"); clr.className = "btn sm sec";
+  clr.textContent = n > 0 || c.id === REST ? "🗑 Grabaciones" : "🗑 Quitar";
+  clr.onclick = () => confirmInline(clr, () => {
+    const mode = state.settings.mode;
+    if (n > 0 || c.id === REST) { c.samples = c.samples.filter((s) => !hasPart(s, mode)); c.seqs = c.seqs.filter((s) => s.m !== mode); }
+    else state.classes = state.classes.filter((x) => x !== c);
+    trained(); render();
+  });
+  acts.append(clr);
+  row.appendChild(acts);
+  return row;
+}
+function confirmInline(btn, fn) {
+  if (btn.dataset.armed) { fn(); return; }
+  btn.dataset.armed = "1"; const old = btn.textContent; btn.textContent = "¿Seguro?"; btn.classList.add("bad");
+  setTimeout(() => { delete btn.dataset.armed; btn.textContent = old; btn.classList.remove("bad"); }, 2500);
+}
+function renderPacks() {
+  const box = $("packList"); box.innerHTML = "";
+  for (const p of PACKS) {
+    const inState = state.classes.filter((c) => c.packId === p.id);
+    const row = document.createElement("div"); row.className = "pack";
+    const info = document.createElement("div");
+    const t = document.createElement("div"); t.textContent = p.name;
+    const n = document.createElement("div"); n.className = "n"; n.textContent = `${p.words.length} palabras · ${p.src}`;
+    info.append(t, n);
+    const b = document.createElement("button"); b.className = "btn sm " + (inState.length ? "sec" : "");
+    if (inState.length) {
+      b.textContent = "Quitar";
+      b.onclick = () => confirmInline(b, () => {
+        const keep = inState.filter((c) => c.samples.length || c.seqs.length);
+        state.classes = state.classes.filter((c) => c.packId !== p.id || keep.includes(c));
+        trained(); render();
+        if (keep.length) toast(`Se conservaron ${keep.length} palabras que ya tenían grabaciones`);
+      });
+    } else {
+      b.textContent = "Agregar";
+      b.onclick = () => {
+        const have = new Set(state.classes.map((c) => c.text.toLowerCase()));
+        let added = 0;
+        for (const w of p.words) {
+          if (have.has(w.toLowerCase())) continue;
+          const c = mkClass(w, "mov"); c.pack = p.name; c.packId = p.id; if (p.video) c.video = p.video;
+          state.classes.push(c); added++;
+        }
+        save(); $("filterTxt").value = ""; $("filterSel").value = "todo"; render();
+        toast(`${added} palabras agregadas`);
+      };
+    }
+    row.append(info, b); box.appendChild(row);
+  }
+}
+function renderPhrases() {
+  const g = $("phraseGrid"); g.innerHTML = "";
+  for (const c of state.classes) {
+    if (c.id === REST || (c.packId && !countFor(c))) continue;
+    const b = document.createElement("button"); b.className = "btn"; b.textContent = c.text; b.onclick = () => say(c.text);
+    g.appendChild(b);
+  }
+}
+$("filterTxt").oninput = render;
+$("filterSel").onchange = render;
+$("addBtn").onclick = () => {
+  const t = $("newText").value.trim(); if (!t) return;
+  state.classes.push(mkClass(t, "quieta")); $("newText").value = ""; save();
+  $("filterTxt").value = t; $("filterSel").value = "all"; render();
+};
+$("newText").addEventListener("keydown", (e) => e.key === "Enter" && $("addBtn").click());
+$("sayFreeBtn").onclick = () => { const t = $("freeText").value.trim(); if (t) say(t); };
+
+// ---------- Ajustes ----------
+function bindSettings() {
+  const s = state.settings;
+  $("modeSel").value = s.mode; $("facingSel").value = s.facing;
+  $("rateRng").value = s.rate; $("holdRng").value = s.holdMs; $("confRng").value = s.minConf; $("movRng").value = s.movTol; $("movRng2").value = s.movTol;
+  $("autoChk").checked = s.auto;
+  const labels = () => {
+    $("rateVal").textContent = Number(s.rate).toFixed(1) + "×";
+    $("holdVal").textContent = (s.holdMs / 1000).toFixed(1) + " s";
+    $("confVal").textContent = Math.round(s.minConf * 100) + "%";
+    $("movVal").textContent = $("movVal2").textContent = Number(s.movTol).toFixed(1) + "×";
+  };
+  labels();
+  $("modeSel").onchange = async (e) => { s.mode = e.target.value; buf = []; trained(); render(); if (running) { try { await ensureModels(); } catch (err) { toast("Error cargando modelo"); } } };
+  $("facingSel").onchange = (e) => { s.facing = e.target.value; save(); if (running) startCam(); };
+  $("voiceSel").onchange = (e) => { s.voice = e.target.value; save(); speak("Hola, así suena mi voz"); };
+  $("rateRng").oninput = (e) => { s.rate = +e.target.value; labels(); save(); };
+  $("holdRng").oninput = (e) => { s.holdMs = +e.target.value; labels(); save(); };
+  $("confRng").oninput = (e) => { s.minConf = +e.target.value; labels(); save(); };
+  $("movRng").oninput = $("movRng2").oninput = (e) => { s.movTol = +e.target.value; $("movRng").value = $("movRng2").value = s.movTol; labels(); save(); };
+  $("autoChk").onchange = (e) => { s.auto = e.target.checked; save(); };
+}
+$("exportBtn").onclick = () => {
+  const blob = new Blob([JSON.stringify(state)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `voz-con-gestos-${new Date().toISOString().slice(0, 10)}.json`; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+};
+$("importFile").onchange = async (e) => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const s = JSON.parse(await f.text());
+    if (!Array.isArray(s.classes)) throw new Error();
+    state = normalize(s); trained(); bindSettings(); loadVoices(); render(); toast("Copia importada");
+  } catch (err) { toast("Archivo inválido"); }
+  e.target.value = "";
+};
+$("resetBtn").onclick = () => confirmInline($("resetBtn"), () => { state = defaultState(); trained(); bindSettings(); render(); toast("Todo borrado"); });
+
+bindSettings();
+save();
+render();
+
+// Pide al navegador que no borre los datos guardados por falta de espacio
+try { navigator.storage?.persist?.(); } catch (e) {}
+
+// Entrenamiento compartido: si en la misma carpeta de la app hay un archivo "entrenamiento.json"
+// (el que genera el botón Exportar) y este dispositivo todavía no tiene nada entrenado, se carga solo.
+(async () => {
+  const hasTraining = state.classes.some((c) => c.samples.length || c.seqs.length);
+  if (hasTraining || !/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch("entrenamiento.json", { cache: "no-cache" });
+    if (!r.ok) return;
+    const data = JSON.parse(await r.text());
+    if (!Array.isArray(data.classes)) return;
+    const mine = state.settings;
+    state = normalize(data);
+    state.settings = { ...state.settings, voice: mine.voice, facing: mine.facing };   // la voz y la cámara son de cada dispositivo
+    trained(); bindSettings(); render();
+    if (state.classes.some((c) => c.samples.length || c.seqs.length)) toast("Entrenamiento cargado automáticamente");
+  } catch (e) {}
+})();
+
+// para pruebas
+window.__vg = { resample, dtw, motion, trimStill, enc, dec, frameVec, staticVec };
+</script>
+</body>
+</html>
