@@ -211,6 +211,13 @@
       <strong>Historial</strong>
       <ul id="history"></ul>
     </div>
+    <div class="card" id="modelBox" hidden>
+      <label class="switch" style="padding-top:0"><span><b>Usar el modelo inteligente</b></span><input type="checkbox" id="modelChk"></label>
+      <p class="hint" id="modelInfo" style="margin-top:0"></p>
+      <label class="f" for="modelRng">Seguridad para hablar: <span id="modelVal"></span></label>
+      <input type="range" id="modelRng" min="0.5" max="0.99" step="0.01">
+      <p class="hint" style="margin-bottom:0">Si dice palabras equivocadas, subila. Si no llega a hablar, bajala.</p>
+    </div>
     <div class="card">
       <label class="f" for="movRng2" style="margin-top:0">Tolerancia de señas con movimiento: <span id="movVal2"></span></label>
       <input type="range" id="movRng2" min="0.5" max="2.5" step="0.1">
@@ -440,7 +447,7 @@ function dec(x, s) {
 function defaultState() {
   const frases = ["Sí", "No", "Hola", "Gracias", "Tengo sed", "Tengo hambre", "Me duele", "Necesito ir al baño", "Te quiero", "Llamá a alguien, por favor"];
   return {
-    settings: { mode: "manos", facing: "user", voice: "", rate: 1, holdMs: 700, minConf: 0.6, movTol: 1, auto: true },
+    settings: { mode: "manos", facing: "user", voice: "", rate: 1, holdMs: 700, minConf: 0.6, movTol: 1, auto: true, useModel: true, modelConf: 0.85 },
     classes: [mkClass("Reposo (no dice nada)", "quieta", REST), ...frases.map((t) => mkClass(t, "quieta"))],
     fv: FV,
   };
@@ -860,7 +867,7 @@ function loop() {
       if (m !== "cara" && handLm) hr = handLm.detectForVideo(box ? liveCv : video, ts);
       if (m !== "manos" && faceLm) fr = faceLm.detectForVideo(video, ts);
     } catch (e) { console.warn(e); }
-    if (m !== "cara" && poseLm && (cap || ++poseN % 3 === 0 || !liveRef)) {
+    if (m !== "cara" && poseLm && (cap || ++poseN % (smartOn() ? 2 : 3) === 0 || !liveRef)) {
       try {
         const pres = poseLm.detectForVideo(video, ts + 0.5);
         lastPoseL = pres?.landmarks?.[0] || null;
@@ -870,6 +877,7 @@ function loop() {
     }
     draw(hr, fr, box);
     if (cap) { capFrame(hr, box, W, H, ts); requestAnimationFrame(loop); return; }
+    if (smartOn()) mbuf.push({ t: ts, f: rawFrame(hr, box, W, H) });
     // la cara se analiza siempre en la imagen completa; el recorte solo aplica a las manos
     onFrame(extract(hr, fr, { W, H, box, ref: liveRef || fallbackRef(W, H) }), ts);
   }
@@ -890,7 +898,8 @@ function onFrame(feat, now) {
   buf.push({ t: now, v });
   while (buf.length && now - buf[0].t > 4000) buf.shift();
   if (feat.held) return;   // mano perdida un instante: se espera a que reaparezca
-  if (++frameN % 2 === 0) movStep(now);
+  if (smartOn()) { if (++frameN % 4 === 0) modelStep(now); }
+  else if (++frameN % 2 === 0) movStep(now);
   if (now < coolUntil) return;
   staticStep(feat, now);
 }
@@ -1288,6 +1297,11 @@ $("ownRec").onclick = async () => {
 };
 function capFrame(hr, box, W, H, now) {
   $("recBar").style.width = Math.min(100, (now - cap.start) / (cap.until - cap.start) * 100) + "%";
+  cap.frames.push(rawFrame(hr, box, W, H)); cap.t.push(Math.round(now - cap.start));
+  if (now >= cap.until) finishCap(W, H);
+}
+// un cuadro "crudo": puntos de las dos manos y del cuerpo, en píxeles de la imagen (NaN = no se ve)
+function rawFrame(hr, box, W, H) {
   const fr = new Float32Array(DS_DIM).fill(NaN);
   const hd = hr?.handednesses || hr?.handedness || [], used = [false, false];
   (hr?.landmarks || []).forEach((lms, hi) => {
@@ -1300,8 +1314,140 @@ function capFrame(hr, box, W, H, now) {
     lms.forEach((pt, j) => { const [x, y] = px(pt); fr[idx * 42 + j * 2] = x; fr[idx * 42 + j * 2 + 1] = y; });
   });
   if (lastPoseL) DS_POSE.forEach((k, j) => { fr[84 + j * 2] = lastPoseL[k].x * W; fr[85 + j * 2] = lastPoseL[k].y * H; });
-  cap.frames.push(fr); cap.t.push(Math.round(now - cap.start));
-  if (now >= cap.until) finishCap(W, H);
+  return fr;
+}
+
+// ---------- Modelo inteligente (red neuronal entrenada con LSA64) ----------
+// Gemelo en JavaScript de features() y del modelo de train.py. Se pega tal cual dentro de la app.
+const M_T = 20, M_RAW = 98, M_FPF = 102;
+function mFill(raw) {                       // raw: Float32Array(T*98) con NaN donde falta
+  const out = Float32Array.from(raw);
+  for (let j = 0; j < M_RAW; j++) {
+    let first = -1;
+    for (let t = 0; t < M_T; t++) if (!Number.isNaN(out[t * M_RAW + j])) { first = t; break; }
+    if (first < 0) { for (let t = 0; t < M_T; t++) out[t * M_RAW + j] = 0; continue; }
+    let last = out[first * M_RAW + j];
+    for (let t = 0; t < M_T; t++) {
+      const v = out[t * M_RAW + j];
+      if (Number.isNaN(v)) out[t * M_RAW + j] = last; else last = v;
+    }
+  }
+  return out;
+}
+function mFeatures(raw) {
+  const r = mFill(raw), F = new Float32Array(M_T * M_FPF);
+  for (let t = 0; t < M_T; t++) {
+    const b = t * M_RAW, o0 = t * M_FPF;
+    for (let h = 0; h < 2; h++) {
+      const p = b + h * 42, o = o0 + h * 45;
+      const wx = r[p], wy = r[p + 1], mx = r[p + 18] - wx, my = r[p + 19] - wy;
+      const n = Math.max(Math.hypot(mx, my), 1e-6), ca = -my / n, sa = -mx / n;
+      let sum = 0; for (let k = 0; k < 42; k++) sum += Math.abs(r[p + k]);
+      const has = sum > 0 ? 1 : 0;
+      F[o] = Number.isNaN(raw[p]) ? 0 : 1;
+      F[o + 1] = wx * has; F[o + 2] = wy * has;
+      for (let k = 1; k < 21; k++) {
+        const x = (r[p + k * 2] - wx) / n, y = (r[p + k * 2 + 1] - wy) / n;
+        F[o + 3 + (k - 1) * 2] = (x * ca - y * sa) * has;
+        F[o + 4 + (k - 1) * 2] = (x * sa + y * ca) * has;
+      }
+      F[o + 43] = sa * has; F[o + 44] = ca * has;
+    }
+    for (let k = 0; k < 8; k++) F[o0 + 90 + k] = r[b + 90 + k];
+  }
+  const vi = [1, 2, 46, 47];
+  for (let t = 0; t < M_T; t++) for (let k = 0; k < 4; k++) {
+    const cur = F[t * M_FPF + vi[k]], prev = t ? F[(t - 1) * M_FPF + vi[k]] : cur;
+    F[t * M_FPF + 98 + k] = (cur - prev) * 4;
+  }
+  return F;
+}
+function mDecode(b64) {
+  const bin = atob(b64), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return new Float32Array(u.buffer);
+}
+function mDecodeI8(b64, scale) {
+  const bin = atob(b64), out = new Float32Array(bin.length);
+  for (let i = 0; i < bin.length; i++) { let q = bin.charCodeAt(i); if (q > 127) q -= 256; out[i] = q * scale; }
+  return out;
+}
+function mLoad(json) {
+  return { classes: json.classes, mu: mDecode(json.mu), sd: mDecode(json.sd),
+    layers: json.layers.map((l) => ({ nin: l.in, nout: l.out, W: l.q ? mDecodeI8(l.W, l.q) : mDecode(l.W), b: mDecode(l.b) })) };
+}
+function mPredict(model, raw) {             // devuelve probabilidades por clase
+  let x = mFeatures(raw);
+  for (let i = 0; i < x.length; i++) x[i] = (x[i] - model.mu[i]) / model.sd[i];
+  model.layers.forEach((L, li) => {
+    const y = new Float32Array(L.nout);
+    for (let j = 0; j < L.nout; j++) y[j] = L.b[j];
+    for (let i = 0; i < L.nin; i++) { const xi = x[i]; if (xi === 0) continue; const row = i * L.nout; for (let j = 0; j < L.nout; j++) y[j] += xi * L.W[row + j]; }
+    if (li < model.layers.length - 1) for (let j = 0; j < L.nout; j++) if (y[j] < 0) y[j] = 0;
+    x = y;
+  });
+  if (x.length === 1) { const p = 1 / (1 + Math.exp(-x[0])); return Float32Array.of(1 - p, p); }
+  let mx = -Infinity; for (const v of x) if (v > mx) mx = v;
+  let s = 0; for (let j = 0; j < x.length; j++) { x[j] = Math.exp(x[j] - mx); s += x[j]; }
+  for (let j = 0; j < x.length; j++) x[j] /= s;
+  return x;
+}
+
+let smart = null, mbuf = [], mPrev = null, mBlocked = null, mRelease = 0;
+const smartOn = () => !!smart && state.settings.useModel && state.settings.mode !== "cara";
+const M_WINDOWS = [800, 1200, 1700, 2300];
+function modelStep(now) {
+  while (mbuf.length && now - mbuf[0].t > 2600) mbuf.shift();
+  const lastHand = [...mbuf].reverse().find((x) => !Number.isNaN(x.f[0]) || !Number.isNaN(x.f[42]));
+  let best = null;
+  if (lastHand && now - lastHand.t < 250) for (const D of M_WINDOWS) {
+    const sel = mbuf.filter((x) => x.t >= now - D);
+    if (sel.length < 8 || now - sel[0].t < D * 0.8) continue;
+    let withHand = 0; const cxs = [], cys = [], ss = [];
+    for (const x of sel) {
+      if (!Number.isNaN(x.f[0]) || !Number.isNaN(x.f[42])) withHand++;
+      if (!Number.isNaN(x.f[86])) { cxs.push((x.f[86] + x.f[88]) / 2); cys.push((x.f[87] + x.f[89]) / 2); ss.push(Math.hypot(x.f[86] - x.f[88], x.f[87] - x.f[89])); }
+    }
+    if (withHand < sel.length * 0.5 || cxs.length < sel.length * 0.5) continue;
+    const med = (a) => a.sort((p, q) => p - q)[a.length >> 1];
+    const cx = med(cxs), cy = med(cys), sc = med(ss);
+    if (!(sc > 5)) continue;
+    const raw = new Float32Array(M_T * M_RAW);
+    let j = 0;
+    for (let i = 0; i < M_T; i++) {
+      const tt = now - D + D * i / (M_T - 1);
+      while (j < sel.length - 1 && Math.abs(sel[j + 1].t - tt) <= Math.abs(sel[j].t - tt)) j++;
+      const f = sel[j].f;
+      for (let k = 0; k < M_RAW; k++) raw[i * M_RAW + k] = (f[k] - (k % 2 ? cy : cx)) / sc;
+    }
+    const p = mPredict(smart, raw);
+    for (let c = 0; c < p.length; c++) if (smart.classes[c] !== 0 && (!best || p[c] > best.p)) best = { id: smart.classes[c], p: p[c] };
+  }
+  const name = best ? LSA64[best.id - 1] : null;
+  const ok = best && best.p >= state.settings.modelConf;
+  $("liveMov").textContent = "Modelo: " + (best ? `${name} · ${Math.round(best.p * 100)}%${ok ? " ✓" : ""}` : "—");
+  $("liveMovBar").style.width = (best ? Math.round(best.p * 100) : 0) + "%";
+  $("liveDiag").textContent = "";
+  if (ok && best.id === mBlocked) { mRelease = 0; mPrev = null; return; }      // sigue en la misma seña
+  if (mBlocked) { if (!mRelease) mRelease = now; if (now - mRelease > 500 || ok) { mBlocked = null; mRelease = 0; } }
+  if (!ok) { mPrev = null; return; }
+  if (mPrev === best.id && tab === "hablar") {
+    fire({ text: name });
+    mBlocked = best.id; mRelease = 0; mPrev = null; coolUntil = now + 500; smooth = []; armed = false; cur = null;
+  } else mPrev = best.id;
+}
+async function loadModel() {
+  if (!/^https?:$/.test(location.protocol)) return;
+  try {
+    const r = await fetch("modelo.json", { cache: "no-cache" });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.fmt !== "voz-con-gestos/modelo" || j.T !== M_T || j.fpf !== M_FPF) return;
+    smart = mLoad(j);
+    const n = smart.classes.filter((c) => c !== 0).length;
+    $("modelBox").hidden = false;
+    $("modelInfo").textContent = `Reconoce ${n} señas de LSA: ` + smart.classes.filter((c) => c !== 0).map((c) => LSA64[c - 1]).join(", ") + ".";
+  } catch (e) {}
 }
 function finishCap(W, H) {
   const c = cap; cap = null;
@@ -1602,6 +1748,11 @@ function bindSettings() {
   $("confRng").oninput = (e) => { s.minConf = +e.target.value; labels(); save(); };
   $("movRng").oninput = $("movRng2").oninput = (e) => { s.movTol = +e.target.value; $("movRng").value = $("movRng2").value = s.movTol; labels(); save(); };
   $("autoChk").onchange = (e) => { s.auto = e.target.checked; save(); };
+  $("modelChk").checked = s.useModel; $("modelRng").value = s.modelConf;
+  const mlab = () => { $("modelVal").textContent = Math.round(s.modelConf * 100) + "%"; };
+  mlab();
+  $("modelChk").onchange = (e) => { s.useModel = e.target.checked; mbuf = []; buf = []; save(); };
+  $("modelRng").oninput = (e) => { s.modelConf = +e.target.value; mlab(); save(); };
 }
 $("exportBtn").onclick = () => {
   const blob = new Blob([JSON.stringify(state)], { type: "application/json" });
@@ -1623,6 +1774,8 @@ $("resetBtn").onclick = () => confirmInline($("resetBtn"), () => { state = defau
 bindSettings();
 save();
 render();
+
+loadModel();
 
 // Pide al navegador que no borre los datos guardados por falta de espacio
 try { navigator.storage?.persist?.(); } catch (e) {}

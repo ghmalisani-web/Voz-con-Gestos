@@ -47,9 +47,14 @@ function mDecode(b64) {
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   return new Float32Array(u.buffer);
 }
+function mDecodeI8(b64, scale) {
+  const bin = atob(b64), out = new Float32Array(bin.length);
+  for (let i = 0; i < bin.length; i++) { let q = bin.charCodeAt(i); if (q > 127) q -= 256; out[i] = q * scale; }
+  return out;
+}
 function mLoad(json) {
   return { classes: json.classes, mu: mDecode(json.mu), sd: mDecode(json.sd),
-    layers: json.layers.map((l) => ({ nin: l.in, nout: l.out, W: mDecode(l.W), b: mDecode(l.b) })) };
+    layers: json.layers.map((l) => ({ nin: l.in, nout: l.out, W: l.q ? mDecodeI8(l.W, l.q) : mDecode(l.W), b: mDecode(l.b) })) };
 }
 function mPredict(model, raw) {             // devuelve probabilidades por clase
   let x = mFeatures(raw);

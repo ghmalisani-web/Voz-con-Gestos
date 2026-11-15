@@ -79,10 +79,30 @@ def features(raw):
 
 
 # ---------- aumentos ----------
-def resample(raw, t0, t1):
-    """Toma el tramo [t0,t1] (en fracción del clip) y lo lleva de nuevo a T cuadros (cuadro más cercano)."""
-    idx = np.clip(np.round(np.linspace(t0, t1, T) * (T - 1)).astype(int), 0, T - 1)
+def resample(raw, t0, t1, n=T):
+    """Toma el tramo [t0,t1] (en fracción del clip) y lo lleva a n cuadros (cuadro más cercano)."""
+    idx = np.clip(np.round(np.linspace(t0, t1, n) * (T - 1)).astype(int), 0, T - 1)
     return raw[idx]
+
+
+def embed(raw, rng, f):
+    """Simula el uso en vivo: la seña ocupa una fracción f de la ventana; antes la mano sube desde abajo
+    (o todavía no se ve) y después baja (o desaparece). Los videos de LSA64 vienen recortados y no traen eso."""
+    n = max(2, int(round(f * T))); rest = T - n
+    pre = int(rng.integers(0, rest + 1)); post = rest - pre
+    mid = resample(raw, 0, 1, n)
+    def ramp(frame, k, up):
+        if k == 0: return np.zeros((0, RAW), np.float32)
+        out = np.repeat(frame[None], k, 0).copy()
+        if rng.random() < 0.35:
+            out[:, 0:84] = np.nan                         # la mano todavía no se ve / ya no se ve
+        else:
+            d = rng.uniform(0.9, 1.6)
+            off = np.linspace(d, d / (k + 1), k) if up else np.linspace(d / (k + 1), d, k)
+            out[:, 1:84:2] += off[:, None]
+            if rng.random() < 0.5: out[: k // 2 if up else 0, 0:84] = np.nan
+        return out
+    return np.concatenate([ramp(mid[0], pre, True), mid, ramp(mid[-1], post, False)]).astype(np.float32)
 
 
 def mirror(raw):
@@ -96,8 +116,10 @@ def mirror(raw):
     return out
 
 
-def augment(raw, rng):
+def augment(raw, rng, live=True):
     a = resample(raw, rng.uniform(0, 0.15), rng.uniform(0.85, 1.0))
+    if live and rng.random() < 0.5:
+        a = embed(a, rng, rng.uniform(0.6, 0.95))
     if rng.random() < 0.3:                           # sostener el final (la persona se queda quieta)
         k = rng.integers(2, 6)
         a = np.concatenate([resample(a, 0, 1)[::1][: T - k], np.repeat(a[-1:], k, 0)])
@@ -118,9 +140,11 @@ def negatives(X, y, rng, n):
     """Ejemplos de 'ninguna seña': sin manos, mano abajo, mano subiendo o bajando, mezcla de dos señas."""
     out = []
     for _ in range(n):
-        k = rng.integers(0, 5)
+        k = rng.integers(0, 8)
         i = rng.integers(len(X))
         a = X[i].copy()
+        if k >= 5:                                        # apenas un pedacito de seña entre subir y bajar la mano
+            out.append(augment(embed(a, rng, rng.uniform(0.05, 0.3)), rng, live=False)); continue
         if k == 0:
             a[:, 0:84] = np.nan
         elif k == 1:
@@ -136,11 +160,11 @@ def negatives(X, y, rng, n):
                 j = (j + 1) % len(X)
             b = X[j]
             a = np.concatenate([resample(a, 0.5, 1)[: T // 2], resample(b, 0, 0.5)[: T - T // 2]])
-        out.append(augment(a, rng) if k != 0 else a)
+        out.append(augment(a, rng, live=False) if k != 0 else a)
     return out
 
 
-def build(X, y, rng, n_aug, mirror_too=True, neg_frac=0.15):
+def build(X, y, rng, n_aug, mirror_too=True, neg_frac=0.25):
     Xs, ys = [], []
     for raw, lab in zip(X, y):
         Xs.append(features(raw)); ys.append(lab)
@@ -168,14 +192,18 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("files", nargs="+"); ap.add_argument("--out", default="modelo.json")
     ap.add_argument("--quick", action="store_true"); ap.add_argument("--aug", type=int, default=4)
+    ap.add_argument("--min", type=int, default=40, help="descartar señas con menos videos que esto")
+    ap.add_argument("--no-cv", action="store_true")
     a = ap.parse_args()
     X, y, subj = load(a.files)
     rng = np.random.default_rng(0)
+    keep = np.isin(y, [c for c in set(y) if (y == c).sum() >= a.min])
+    X, y, subj = X[keep], y[keep], subj[keep]
     classes = sorted(set(y))
     print(f"{len(X)} videos · {len(classes)} señas · personas {sorted(set(subj))}")
 
     # --- validación: se entrena sin una persona y se prueba con ella ---
-    if len(classes) >= 2 and len(set(subj)) >= 3:
+    if not a.no_cv and len(classes) >= 2 and len(set(subj)) >= 3:
         hit = tot = 0; per_subj = {}; conf = {}
         for s in sorted(set(subj)):
             tr, te = subj != s, subj == s
@@ -196,7 +224,11 @@ def main():
     b64 = lambda arr: base64.b64encode(np.asarray(arr, "<f4").tobytes()).decode()
     model = {"fmt": "voz-con-gestos/modelo", "v": 1, "T": T, "fpf": FPF, "classes": [int(c) for c in clf.classes_],
              "mu": b64(mu), "sd": b64(sd),
-             "layers": [{"in": int(W.shape[0]), "out": int(W.shape[1]), "W": b64(W), "b": b64(b)} for W, b in zip(clf.coefs_, clf.intercepts_)]}
+             "layers": []}
+    for W, b in zip(clf.coefs_, clf.intercepts_):          # pesos en 8 bits (4 veces más liviano)
+        q = float(np.abs(W).max()) / 127
+        model["layers"].append({"in": int(W.shape[0]), "out": int(W.shape[1]), "q": q,
+                                "W": base64.b64encode(np.clip(np.round(W / q), -127, 127).astype(np.int8).tobytes()).decode(), "b": b64(b)})
     json.dump(model, open(a.out, "w"))
     print("Modelo guardado en", a.out, f"({len(json.dumps(model)) / 1e6:.1f} MB)")
 
